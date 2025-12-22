@@ -44,42 +44,40 @@ end
 
 MainTab:CreateSection("Map & Schwierigkeit")
 
--- Dropdown für Maps
 MainTab:CreateDropdown({
     Name = "Wähle Map",
     Options = mapList,
     CurrentOption = "ConchStreet",
-    Callback = function(Option)
-        selectedMap = Option
-    end,
+    Callback = function(Option) selectedMap = Option end,
 })
 
--- Dropdown für Difficulty (Angepasste Werte)
 MainTab:CreateDropdown({
     Name = "Schwierigkeit",
     Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
     CurrentOption = "Normal",
     Callback = function(Option)
-        if Option == "Normal" then selectedDifficulty = 1
-        elseif Option == "Hard" then selectedDifficulty = 2
-        elseif Option == "Nightmare" then selectedDifficulty = 3
-        elseif Option == "DavyJones" then selectedDifficulty = 4
-        end
+        local diffs = {Normal = 1, Hard = 2, Nightmare = 3, DavyJones = 4}
+        selectedDifficulty = diffs[Option] or 1
     end,
 })
 
+-- Chapter Auswahl nebeneinander (Rayfield nutzt vertikale Listen, 
+-- daher gruppieren wir sie in kleine Sections für bessere Übersicht)
 MainTab:CreateSection("Chapter Auswahl (Aktuell: " .. tostring(selectedChapter) .. ")")
 
--- Buttons für Chapter 1-10
-for i = 1, 10 do
-    MainTab:CreateButton({
-        Name = "Chapter " .. i,
-        Callback = function()
-            selectedChapter = i
-            Rayfield:Notify({Title = "Chapter gesetzt", Content = "Kapitel " .. i .. " ausgewählt."})
-        end,
-    })
-end
+-- Um sie optisch "nebeneinander" zu wirken, nutzen wir hier eine kompakte Darstellung
+local chaps = {}
+for i = 1, 10 do table.insert(chaps, tostring(i)) end
+
+MainTab:CreateDropdown({
+    Name = "Schnellwahl Chapter",
+    Options = chaps,
+    CurrentOption = "1",
+    Callback = function(Option)
+        selectedChapter = tonumber(Option)
+        Rayfield:Notify({Title = "Kapitel", Content = "Kapitel " .. Option .. " gewählt."})
+    end,
+})
 
 MainTab:CreateSection("Aktion")
 
@@ -96,6 +94,7 @@ MainTab:CreateButton({
 
         local currentLobbyID = nil
         
+        -- Listener für die ID
         local connection
         connection = createEvent.OnClientEvent:Connect(function(...)
             local args = {...}
@@ -105,17 +104,19 @@ MainTab:CreateButton({
             end
         end)
 
-        Rayfield:Notify({Title="Status", Content="Teleportiere zur Queue..."})
+        -- 1. Teleport
+        Rayfield:Notify({Title="Schritt 1", Content="Teleport zur Queue..."})
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
 
+        -- 2. Warten auf ID
         local start = tick()
         while not currentLobbyID and (tick() - start < 10) do task.wait(0.1) end
         
         if currentLobbyID then
-            Rayfield:Notify({Title="ID Gefunden", Content="Lobby: " .. tostring(currentLobbyID)})
-            task.wait(0.6)
+            Rayfield:Notify({Title="Schritt 2", Content="ID erhalten: " .. tostring(currentLobbyID)})
+            task.wait(0.8) -- Wichtig für Map-Erstellung
             
-            -- MAP & SETTINGS BESTÄTIGEN
+            -- 3. Map erstellen/bestätigen
             local confirmArgs = {
                 [1] = currentLobbyID,
                 [2] = "ConfirmMap",
@@ -128,16 +129,16 @@ MainTab:CreateButton({
                 }
             }
             signalEvent:FireServer(unpack(confirmArgs))
+            print("ConfirmMap gesendet")
+
+            task.wait(0.6) -- Zeit lassen, damit das Spiel die Map lädt
             
-            task.wait(0.4)
-            
-            -- START SIGNAL (Dein Screenshot-Fix)
+            -- 4. Start Signal (Dein Screenshot-Fix)
             signalEvent:FireServer(currentLobbyID, "StartGame")
-            
             Rayfield:Notify({Title="Erfolg", Content="Spiel wird gestartet!"})
         else
             if connection then connection:Disconnect() end
-            Rayfield:Notify({Title="Timeout", Content="ID nicht gefunden."})
+            Rayfield:Notify({Title="Fehler", Content="Timeout: Keine Lobby ID."})
         end
     end,
 })
