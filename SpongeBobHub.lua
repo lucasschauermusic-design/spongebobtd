@@ -1,5 +1,5 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Map Tester", LoadingTitle = "Lade Test-Modus..."})
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Map Fixer", LoadingTitle = "Lade..."})
 local MainTab = Window:CreateTab("Main", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,15 +11,7 @@ local selectedMap = "ConchStreet"
 local selectedChapter = 1
 local selectedDifficulty = 1
 
-local mapList = {
-    "ChumBucket", 
-    "ConchStreet", 
-    "JellyfishFields", 
-    "KampKoral", 
-    "KrustyKrab", 
-    "RockBottom", 
-    "SandysTreedome"
-}
+local mapList = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"}
 
 -- FastTravel Modul finden
 local FastTravel = nil
@@ -40,7 +32,7 @@ local function DeepFind(name, className)
     return nil
 end
 
-MainTab:CreateSection("Test-Konfiguration")
+MainTab:CreateSection("Konfiguration")
 
 MainTab:CreateDropdown({
     Name = "Wähle Map",
@@ -61,27 +53,25 @@ MainTab:CreateDropdown({
     Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
     CurrentOption = "Normal",
     Callback = function(Option)
-        local diffs = {["Normal"] = 1, ["Hard"] = 2, ["Nightmare"] = 3, ["DavyJones"] = 4}
+        local diffs = {Normal = 1, Hard = 2, Nightmare = 3, DavyJones = 4}
         selectedDifficulty = diffs[Option] or 1
     end,
 })
 
-MainTab:CreateSection("Test-Aktion")
+MainTab:CreateSection("Aktion")
 
 MainTab:CreateButton({
-    Name = "🛠️ TEST: NUR MAP AUSWÄHLEN",
+    Name = "🛠️ TEST: MAP ERSTELLEN",
     Callback = function()
         local signalEvent = DeepFind("Replica_ReplicaSignal", "RemoteEvent")
         local createEvent = DeepFind("Replica_ReplicaCreate", "RemoteEvent")
         
         if not signalEvent or not createEvent or not FastTravel then 
-             Rayfield:Notify({Title="Fehler", Content="Events/Module nicht gefunden!"})
+             Rayfield:Notify({Title="Fehler", Content="Events/Module fehlen!"})
              return 
         end
 
         local currentLobbyID = nil
-        
-        -- Listener für die Lobby ID
         local connection
         connection = createEvent.OnClientEvent:Connect(function(...)
             local args = {...}
@@ -91,7 +81,7 @@ MainTab:CreateButton({
             end
         end)
 
-        -- 1. In die Queue gehen
+        -- 1. Teleport
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
 
         -- 2. Warten auf ID
@@ -99,12 +89,13 @@ MainTab:CreateButton({
         while not currentLobbyID and (tick() - timeout < 10) do task.wait(0.1) end
         
         if currentLobbyID then
-            Rayfield:Notify({Title="Lobby bereit", Content="ID: " .. tostring(currentLobbyID) .. " | Sende Daten..."})
+            Rayfield:Notify({Title="Lobby bereit", Content="Warte auf UI Initialisierung..."})
             
-            -- WICHTIG: Längere Pause, damit der Server die Lobby registriert
-            task.wait(2.0) 
+            -- WICHTIG: Erhöhte Pause. Der Fehler "index nil with Begin" deutet darauf hin,
+            -- dass das UI noch nicht bereit ist, wenn wir die Map bestätigen.
+            task.wait(2.5) 
             
-            -- EXAKTE REPLIKATION DEINER LOGS (Ohne StartGame!)
+            -- Exakte Struktur deiner funktionierenden Calls
             local packet = {
                 [1] = currentLobbyID,
                 [2] = "ConfirmMap",
@@ -116,13 +107,15 @@ MainTab:CreateButton({
                 }
             }
             
-            -- Signal senden (genau wie Call #1 - #7)
+            -- Wir senden das Signal zur Sicherheit zweimal mit kurzem Abstand
+            signalEvent:FireServer(table.unpack(packet))
+            task.wait(0.5)
             signalEvent:FireServer(table.unpack(packet))
             
-            Rayfield:Notify({Title="Gesendet", Content="Überprüfe jetzt, ob die Map gewählt wurde!"})
+            Rayfield:Notify({Title="Erfolg", Content="ConfirmMap gesendet für " .. selectedMap})
         else
             if connection then connection:Disconnect() end
-            Rayfield:Notify({Title="Fehler", Content="Lobby ID Zeitüberschreitung."})
+            Rayfield:Notify({Title="Fehler", Content="Lobby-ID nicht rechtzeitig erhalten."})
         end
     end,
 })
