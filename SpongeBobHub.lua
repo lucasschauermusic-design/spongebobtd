@@ -1,14 +1,16 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Teleport Master", LoadingTitle = "Lade..."})
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Auto-Joiner", LoadingTitle = "Lade..."})
 local MainTab = Window:CreateTab("Auto-Join", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- Einstellungen
-local targetMap = "ConchStreet" -- Hier den internen Map-Namen eintragen (z.B. ConchStreet)
-local targetDifficulty = "Hard"
+-- Einstellungen (Standardwerte basierend auf deinem Snippet)
+local targetMap = "ConchStreet" 
+local targetDifficulty = 1  -- 1 scheint "Easy" oder "Normal" zu sein? (Zahl statt Text!)
+local targetChapter = 1
+local targetEndless = false
 
 -- 1. FastTravel Controller laden
 local FastTravel = nil
@@ -20,9 +22,9 @@ for _, mod in pairs(scripts:GetDescendants()) do
     end
 end
 
--- UI erstellen
+-- UI
 MainTab:CreateInput({
-    Name = "Map Name (Intern)",
+    Name = "Map (Interner Name)",
     PlaceholderText = "z.B. ConchStreet",
     RemoveTextAfterFocusLost = false,
     Callback = function(text)
@@ -31,108 +33,98 @@ MainTab:CreateInput({
 })
 
 MainTab:CreateButton({
-    Name = "AUTO JOIN & START",
+    Name = "AUTO JOIN & CONFIG & START",
     Callback = function()
         if not FastTravel then 
             Rayfield:Notify({Title="Fehler", Content="FastTravel nicht geladen!"})
             return 
         end
 
-        -- A) Wir suchen das Event, das die ID sendet
-        local replicaEvents = ReplicatedStorage:FindFirstChild("ReplicaRemoteEvents")
-        local createEvent = replicaEvents and replicaEvents:FindFirstChild("Replica_ReplicaCreate")
-
-        if not createEvent then
-            Rayfield:Notify({Title="Fehler", Content="Konnte Replica_ReplicaCreate nicht finden!"})
+        -- A) Wir suchen die nötigen Remotes VORHER
+        local eventFolder = ReplicatedStorage:FindFirstChild("ReplicaRemoteEvents")
+        if not eventFolder then
+            Rayfield:Notify({Title="Fehler", Content="Ordner 'ReplicaRemoteEvents' nicht gefunden!"})
             return
         end
 
-        print("System bereit. Warte auf Teleport...")
+        local createEvent = eventFolder:FindFirstChild("Replica_ReplicaCreate")
+        local signalEvent = eventFolder:FindFirstChild("Replica_ReplicaSignal") -- Das aus deinem Snippet
+
+        if not createEvent or not signalEvent then
+            Rayfield:Notify({Title="Fehler", Content="Remotes nicht gefunden!"})
+            return
+        end
+
         Rayfield:Notify({Title="Status", Content="Teleport gestartet - Warte auf ID..."})
 
-        -- B) Variable für die gefundene ID
+        -- B) ID Abfangen (Listener)
         local capturedID = nil
         local connection = nil
 
-        -- C) DIE FALLE STELLEN: Wir hören zu, BEVOR wir uns bewegen
         connection = createEvent.OnClientEvent:Connect(function(...)
             local args = {...}
-            -- Laut deinem Snippet ist args[1] die ID und args[2] die Datentabelle
             local id = args[1]
-            local data = args[2]
-
-            print("Event empfangen! ID:", id)
-
-            -- Optional: Prüfen, ob wir der Owner sind, um sicherzugehen
-            -- (Nimmt die erste ID, die reinkommt, falls Owner-Check fehlschlägt)
             if id and type(id) == "number" then
                 capturedID = id
-                connection:Disconnect() -- Wir haben, was wir wollten, Verbindung trennen
+                connection:Disconnect() 
             end
         end)
 
-        -- D) JETZT erst teleportieren
+        -- C) Teleport ausführen
         task.spawn(function()
             FastTravel:_attemptTeleportToEmptyQueue()
         end)
 
-        -- E) Warten bis die ID da ist (mit Timeout, falls es buggt)
-        local timeout = 8 -- Sekunden warten maximal
+        -- D) Warten auf ID
         local startTime = tick()
-        
         repeat 
             task.wait(0.1)
-        until capturedID or (tick() - startTime > timeout)
-
-        -- Sicherheits-Disconnect, falls Timeout griff
+        until capturedID or (tick() - startTime > 8)
+        
         if connection then connection:Disconnect() end
 
-        -- F) Auswertung
+        -- E) ABLAUF STARTEN
         if capturedID then
-            Rayfield:Notify({Title="Erfolg!", Content="Lobby ID erhalten: " .. capturedID})
-            print("Lobby ID erfolgreich abgefangen: " .. capturedID)
+            Rayfield:Notify({Title="ID Gefunden", Content="Lobby: " .. capturedID})
             
-            -- Kurze Pause für Sync
-            task.wait(0.5)
+            task.wait(0.5) -- Kurze Pause zur Sicherheit
 
-            -----------------------------------------------------
-            -- SCHRITT G: MAP EINSTELLEN (Replica Signal)
-            -----------------------------------------------------
-            -- Hinweis: Hier senden wir die Daten an den Server
-            local replicaSignal = ReplicatedStorage:FindFirstChild("ReplicaRemoteSignal", true)
-            if replicaSignal then
-                -- Versuche das typische Format für Updates
-                -- Oft muss man spezifizieren, WAS man ändert. 
-                -- Wir senden hier die Map-Daten passend zur ID.
-                local args = {
-                    [1] = capturedID,
-                    [2] = {
-                        ["Stage"] = targetMap,
-                        ["Difficulty"] = targetDifficulty,
-                        ["Mode"] = "Story"
-                    }
-                }
-                replicaSignal:FireServer(unpack(args))
-                print("Map Daten gesendet.")
-            else
-                warn("ReplicaRemoteSignal nicht gefunden!")
-            end
+            -- 1. MAP BESTÄTIGEN (Dein Snippet Code)
+            local args = {
+                [1] = capturedID,
+                [2] = "ConfirmMap", -- WICHTIG: Das fehlte vorher!
+                [3] = {
+                    ["Difficulty"] = targetDifficulty,
+                    ["Chapter"] = targetChapter,
+                    ["Endless"] = targetEndless,
+                    ["World"] = targetMap, -- Hier setzen wir deinen Map-Namen ein
+                },
+            }
+            
+            -- Senden
+            signalEvent:FireServer(unpack(args))
+            print("ConfirmMap gesendet für ID: " .. capturedID)
+            Rayfield:Notify({Title="Config", Content="Map '"..targetMap.."' bestätigt."})
 
-            task.wait(0.5)
+            task.wait(0.8) -- Dem Server kurz Zeit geben, die Map zu speichern
 
-            -----------------------------------------------------
-            -- SCHRITT H: SPIEL STARTEN (Invoker)
-            -----------------------------------------------------
+            -- 2. SPIEL STARTEN (Invoker)
+            -- Jetzt wo die Map "Confirmed" ist, sollte der Start funktionieren.
             local invoker = ReplicatedStorage:FindFirstChild("MatchStartInvoker", true)
+            
             if invoker then
                 invoker:InvokeServer(capturedID)
-                Rayfield:Notify({Title="Gestartet", Content="Viel Spaß!"})
+                Rayfield:Notify({Title="Start", Content="Teleport ins Match..."})
             else
-                Rayfield:Notify({Title="Warnung", Content="MatchStartInvoker nicht gefunden."})
+                -- Fallback: Manchmal muss man auch ein Signal zum Starten senden?
+                -- Probieren wir "RequestStart" falls Invoker fehlt (nur Vermutung)
+                -- signalEvent:FireServer(capturedID, "RequestStart")
+                warn("MatchStartInvoker nicht gefunden!")
+                Rayfield:Notify({Title="Warnung", Content="Konnte Start-Invoker nicht finden."})
             end
 
         else
-            Rayfield:Notify({Title="Timeout", Content="Keine Lobby-ID innerhalb von 8s erhalten."})
+            Rayfield:Notify({Title="Timeout", Content="Keine Lobby-ID erhalten."})
         end
     end,
 })
