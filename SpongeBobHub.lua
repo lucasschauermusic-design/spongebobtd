@@ -1,5 +1,5 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Final Fix", LoadingTitle = "Lade..."})
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: UI Force Fix", LoadingTitle = "Lade..."})
 local MainTab = Window:CreateTab("Main", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,21 +28,42 @@ MainTab:CreateDropdown({
 })
 
 MainTab:CreateButton({
-    Name = "🚀 START (No Error Version)",
+    Name = "🚀 START (UI Force Method)",
     Callback = function()
-        -- Wir speichern die Auswahl als feste Strings/Zahlen
+        -- Daten einfrieren
         local finalMap = tostring(selectedMap)
         local finalDiff = tonumber(selectedDifficulty)
         
-        -- Listener aktivieren
         local connection
         connection = replicaCreate.OnClientEvent:Connect(function(lobbyID)
             if type(lobbyID) == "number" then
                 connection:Disconnect()
                 
-                task.wait(2.2)
+                -- 1. SCHRITT: LOKALE UI "AUSTRIKSEN" (Deine Lösung)
+                -- Wir simulieren für deinen Client, dass die Map bereits gewählt wurde
+                pcall(function()
+                    firesignal(replicaCreate.OnClientEvent, lobbyID, {
+                        [1] = "Queue_" .. game:GetService("HttpService"):GenerateGUID(false),
+                        [2] = {},
+                        [3] = {
+                            ["Players"] = {game:GetService("Players").LocalPlayer},
+                            ["selectionTimeLeft"] = 45,
+                            ["FriendsOnly"] = false,
+                            ["Difficulty"] = finalDiff,
+                            ["Chapter"] = 1,
+                            ["confirmedMap"] = true,
+                            ["LobbyOwner"] = game:GetService("Players").LocalPlayer,
+                            ["Mode"] = "Story",
+                            ["Stage"] = finalMap, -- Hier setzen wir deine Map!
+                            ["PlayerLevels"] = {},
+                        },
+                        [4] = 0,
+                    })
+                end)
+
+                task.wait(1.5)
                 
-                -- Das Paket exakt nach deinen Logs bauen
+                -- 2. SCHRITT: DEM SERVER DIE WAHL MITTEILEN
                 local packet = {
                     [1] = lobbyID,
                     [2] = "ConfirmMap",
@@ -53,16 +74,15 @@ MainTab:CreateButton({
                         ["World"] = finalMap
                     }
                 }
-                
-                -- Senden ohne Text-Verknüpfung (Verhindert den Concatenate Error)
                 replicaSignal:FireServer(table.unpack(packet))
                 
-                task.wait(1.5)
+                -- 3. SCHRITT: STARTEN
+                task.wait(1.0)
                 replicaSignal:FireServer(lobbyID, "StartGame")
             end
         end)
 
-        -- Teleport auslösen
+        -- Teleport
         local FastTravel = nil
         for _, mod in pairs(game:GetService("Players").LocalPlayer.PlayerScripts:GetDescendants()) do
             if mod.Name == "FastTravelController" and mod:IsA("ModuleScript") then
@@ -70,7 +90,6 @@ MainTab:CreateButton({
                 break
             end
         end
-        
         if FastTravel then
             task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
         end
