@@ -31,22 +31,21 @@ MainTab:CreateDropdown({
 MainTab:CreateButton({
     Name = "🚀 START (Selection Fix)",
     Callback = function()
-        -- DEINE LÖSUNG: Wir legen JETZT fest, was gesendet wird
+        -- FIX: Wir speichern die Auswahl JETZT in lokalen Variablen
         local finalMap = selectedMap
         local finalDiff = selectedDifficulty
         local finalChapter = selectedChapter
         
-        print("Vorbereitet für: " .. finalMap .. " auf Stufe " .. tostring(finalDiff))
-
-        -- Listener aktivieren
+        -- Listener aktivieren, um die Lobby-ID abzufangen
         local connection
         connection = replicaCreate.OnClientEvent:Connect(function(lobbyID)
             if type(lobbyID) == "number" then
                 connection:Disconnect()
                 
+                -- Kurze Pause für die Stabilität des Spiels
                 task.wait(2.0)
                 
-                -- Wir nutzen die "eingefrorenen" Variablen von oben
+                -- Das Paket wird mit den vorab festgeschriebenen Werten erstellt
                 local packet = {
                     [1] = lobbyID,
                     [2] = "ConfirmMap",
@@ -58,15 +57,16 @@ MainTab:CreateButton({
                     }
                 }
                 
-                replicaSignal:FireServer(table.unpack(packet))
-                warn("Gesendet: " .. finalMap)
+                -- Signal an den Server senden
+                replicaSignal:FireServer(unpack(packet))
                 
+                -- Finaler Startbefehl
                 task.wait(1.5)
                 replicaSignal:FireServer(lobbyID, "StartGame")
             end
         end)
 
-        -- Teleport auslösen
+        -- Teleport in die Queue auslösen
         local FastTravel = nil
         for _, mod in pairs(game:GetService("Players").LocalPlayer.PlayerScripts:GetDescendants()) do
             if mod.Name == "FastTravelController" and mod:IsA("ModuleScript") then
