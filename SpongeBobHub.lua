@@ -1,62 +1,56 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local vim = game:GetService("VirtualInputManager") -- Emuliert echte Hardware-Eingaben
 
 local Window = Rayfield:CreateWindow({
-   Name = "SpongeBob TD: Pro Selector",
-   LoadingTitle = "Emuliere Touch-Eingabe...",
+   Name = "SpongeBob TD: Global Selector",
+   LoadingTitle = "Suche Spiellogik...",
 })
 
--- Sicherstellen, dass das Tab existiert (Fix für den Nil-Error)
 local MainTab = Window:CreateTab("Welten", 4483362458)
-task.wait(0.5)
+local selectedWorld = "ChumBucket"
 
-if MainTab then
-    local selectedWorld = "ChumBucket"
+-- Dropdown zur Auswahl
+MainTab:CreateDropdown({
+   Name = "Welt wählen",
+   Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
+   CurrentOption = {"ChumBucket"},
+   Callback = function(Option) selectedWorld = Option[1] end,
+})
 
-    MainTab:CreateDropdown({
-       Name = "Welt wählen",
-       Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
-       CurrentOption = {"ChumBucket"},
-       Callback = function(Option) selectedWorld = Option[1] end,
-    })
-
-    MainTab:CreateButton({
-       Name = "Welt-Auswahl erzwingen",
-       Callback = function()
-           local player = game.Players.LocalPlayer
-           local screen = player.PlayerGui:FindFirstChild("QueueScreen")
-           
-           if screen then
-               -- 1. Internes Attribut setzen (Wichtig laut deinem Log!)
-               screen:SetAttribute("Hidden", false)
-               
-               local success, err = pcall(function()
-                   local worlds = screen.Main.SelectionScreen.Main.StageSelect.WorldSelect.Content.Stages
-                   local targetBtn = worlds:FindFirstChild(selectedWorld)
-
-                   if targetBtn then
-                       -- 2. Position auf dem Bildschirm berechnen
-                       local pos = targetBtn.AbsolutePosition
-                       local size = targetBtn.AbsoluteSize
-                       -- Wir klicken genau in die Mitte des Buttons
-                       local centerX = pos.X + (size.X / 2)
-                       local centerY = pos.Y + (size.Y / 2) + 58 -- Offset für die TopBar
-
-                       -- 3. Physischen Klick simulieren
-                       vim:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1) -- Drücken
+-- Button-Name exakt wie in deinem Screenshot
+MainTab:CreateButton({
+   Name = "Welt-Auswahl erzwingen",
+   Callback = function()
+       local found = false
+       
+       -- Wir durchsuchen JEDES Script nach der SelectWorld-Funktion
+       for _, script in pairs(game:GetDescendants()) do
+           if script:IsA("LocalScript") then
+               local success, sEnv = pcall(getsenv, script)
+               if success and sEnv and (sEnv.SelectWorld or sEnv.SelectChapter) then
+                   pcall(function()
+                       -- Zuerst Chapter 1 wählen (Voraussetzung laut Log)
+                       if sEnv.SelectChapter then sEnv.SelectChapter(1) end
                        task.wait(0.1)
-                       vim:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1) -- Loslassen
-                       
-                       -- 4. Sicherheitshalber das Activated-Event zusätzlich feuern
-                       firesignal(targetBtn.Activated)
-                       
-                       Rayfield:Notify({Title = "Status", Content = "Touch-Klick an " .. selectedWorld .. " emuliert!"})
-                   end
-               end)
-               if not success then warn("Fehler: " .. tostring(err)) end
-           else
-               Rayfield:Notify({Title = "Fehler", Content = "Bitte Map-Menü öffnen!"})
+                       -- Dann die Welt setzen
+                       if sEnv.SelectWorld then sEnv.SelectWorld(selectedWorld) end
+                       found = true
+                   end)
+               end
            end
-       end,
-    })
-end
+       end
+
+       if found then
+           Rayfield:Notify({Title = "Erfolg", Content = "Logik für " .. selectedWorld .. " gefunden und ausgeführt!"})
+       else
+           -- Fallback: UI-Klick Methode
+           local screen = game.Players.LocalPlayer.PlayerGui:FindFirstChild("QueueScreen")
+           if screen then
+               local btn = screen.Main.SelectionScreen.Main.StageSelect.WorldSelect.Content.Stages:FindFirstChild(selectedWorld)
+               if btn then
+                   for _, v in pairs(getconnections(btn.MouseButton1Click)) do v:Fire() end
+                   Rayfield:Notify({Title = "Fallback", Content = "Button-Klick gesendet!"})
+               end
+           end
+       end
+   end,
+})
