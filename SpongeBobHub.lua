@@ -1,19 +1,14 @@
-print("LOG 1: Script gestartet")
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SpongeFix: Knit",
-   LoadingTitle = "Warte auf Controller...",
+   Name = "SpongeBob TD: Knit Master",
+   LoadingTitle = "Analysiere Controller-Methoden...",
 })
-print("LOG 2: Fenster initialisiert")
 
 local MainTab = Window:CreateTab("Welten", 4483362458)
+local selectedWorld = "ChumBucket"
 
--- Wir prüfen sofort, ob das Tab existiert
 if MainTab then
-    print("LOG 3: Tab erfolgreich erstellt")
-    local selectedWorld = "ChumBucket"
-
     MainTab:CreateDropdown({
        Name = "Welt wählen",
        Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
@@ -24,41 +19,45 @@ if MainTab then
     MainTab:CreateButton({
        Name = "Welt-Auswahl erzwingen",
        Callback = function()
-           print("!!! BUTTON GEDRÜCKT !!!")
+           print("!!! START: Knit-Suche !!!")
            
            local success, err = pcall(function()
-               -- Knit Framework abrufen
                local Knit = game:GetService("ReplicatedStorage"):FindFirstChild("Knit", true)
-               if Knit then
-                   local KnitClient = require(Knit.Parent.Knit)
-                   
-                   -- Controller aus deinem Screenshot
-                   local worldCtrl = KnitClient.GetController("FactionWorldController")
-                   local uiCtrl = KnitClient.GetController("UIController")
+               local KnitClient = require(Knit.Parent.Knit)
+               
+               -- Controller aus deinem Fund
+               local worldCtrl = KnitClient.GetController("FactionWorldController")
+               local uiCtrl = KnitClient.GetController("UIController")
 
-                   -- REIHENFOLGE: ERST WELT, DANN KAPITEL
-                   if worldCtrl then
-                       print("Knit: Sende SelectWorld -> " .. selectedWorld)
-                       worldCtrl:SelectWorld(selectedWorld)
+               -- SCHRITT 1: Die richtige Welt-Funktion finden
+               if worldCtrl then
+                   local foundMethod = nil
+                   -- Wir suchen nach Namen wie SelectWorld, SetWorld, JoinWorld
+                   for name, func in pairs(worldCtrl) do
+                       if type(func) == "function" and (name:find("World") or name:find("Stage")) then
+                           print("Mögliche Methode gefunden: " .. name)
+                           foundMethod = name
+                       end
                    end
 
-                   task.wait(0.6) -- Zeit für den Server-Check
-
-                   if uiCtrl then
-                       print("Knit: Sende SelectChapter -> 1")
-                       uiCtrl:SelectChapter(1)
+                   if foundMethod then
+                       print("Knit: Rufe " .. foundMethod .. " für " .. selectedWorld)
+                       worldCtrl[foundMethod](worldCtrl, selectedWorld)
+                   else
+                       print("Keine passende Welt-Methode im FactionWorldController gefunden!")
                    end
-                   
-                   Rayfield:Notify({Title = "Erfolg", Content = "Signale an Knit-Controller gesendet!"})
-               else
-                   print("Fehler: Knit-Framework nicht gefunden.")
+               end
+
+               task.wait(0.5)
+
+               -- SCHRITT 2: Kapitel aktivieren (Name ist sicher aus deinem Log)
+               if uiCtrl and uiCtrl.SelectChapter then
+                   print("Knit: Aktiviere Kapitel 1")
+                   uiCtrl:SelectChapter(1)
                end
            end)
 
            if not success then warn("Aktions-Fehler: " .. tostring(err)) end
        end,
     })
-    print("LOG 4: Alles bereit!")
-else
-    warn("KRITISCH: Tab konnte nicht erstellt werden!")
 end
