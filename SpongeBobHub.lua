@@ -1,60 +1,57 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SpongeBob TD: Auto-UI",
-   LoadingTitle = "Verbinde...",
+   Name = "SpongeBob TD: Simple Map Selector",
+   LoadingTitle = "Lade Map-Logik...",
 })
 
-local MainTab = Window:CreateTab("Auto-Select", 4483362458)
+local MainTab = Window:CreateTab("Welten", 4483362458)
 
-local selectedDiff = "Normal"
+local selectedWorld = "ChumBucket"
 
+-- Dropdown nur für die Welten
 MainTab:CreateDropdown({
-   Name = "Wähle Schwierigkeit",
-   Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
-   CurrentOption = {"Normal"},
-   Callback = function(Option)
-      selectedDiff = Option[1]
+   Name = "Welt wählen",
+   Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
+   CurrentOption = {"ChumBucket"},
+   Callback = function(Option) 
+       selectedWorld = Option[1] 
    end,
 })
 
 MainTab:CreateButton({
-   Name = "Auswahl im Spiel bestätigen",
+   Name = "Map im Menü auswählen",
    Callback = function()
-       -- 1. Pfad sicher abrufen
        local player = game.Players.LocalPlayer
-       local queueScreen = player.PlayerGui:FindFirstChild("QueueScreen")
+       local screen = player.PlayerGui:FindFirstChild("QueueScreen")
        
-       if not queueScreen then
-           Rayfield:Notify({Title = "Fehler", Content = "QueueScreen nicht gefunden! Bitte Menü öffnen.", Duration = 3})
+       if not screen then
+           Rayfield:Notify({Title = "Fehler", Content = "Bitte öffne zuerst das Map-Menü im Spiel!"})
            return
        end
 
-       -- 2. Den exakten Pfad aus deinen Dex-Screenshots nutzen
-       -- Pfad: QueueScreen -> Main -> SelectionScreen -> Info -> Content -> Difficulties
        local success, err = pcall(function()
-           local diffs = queueScreen.Main.SelectionScreen.Info.Content.Difficulties
-           local btn = diffs:FindFirstChild(selectedDiff)
+           -- Der Pfad, den du in Dex bestätigt hast
+           local worlds = screen.Main.SelectionScreen.Main.StageSelect.WorldSelect.Content.Stages
+           local targetBtn = worlds:FindFirstChild(selectedWorld)
 
-           if btn and btn:IsA("TextButton") then
-               -- Wir versuchen verschiedene Klick-Methoden für Codex
+           if targetBtn then
+               -- Simuliert den Klick auf die Map
                if firesignal then
-                   firesignal(btn.MouseButton1Click)
-               elseif btn.MouseButton1Click then
-                   -- Alternative falls firesignal fehlt
-                   for _, v in pairs(getconnections(btn.MouseButton1Click)) do
+                   firesignal(targetBtn.MouseButton1Click)
+               else
+                   -- Alternative Methode für andere Executor
+                   for _, v in pairs(getconnections(targetBtn.MouseButton1Click)) do
                        v:Fire()
                    end
                end
-               Rayfield:Notify({Title = "Erfolg", Content = selectedDiff .. " ausgewählt!", Duration = 2})
+               
+               Rayfield:Notify({Title = "Erfolg", Content = selectedWorld .. " wurde markiert!"})
            else
-               Rayfield:Notify({Title = "Fehler", Content = "Button " .. selectedDiff .. " nicht gefunden!", Duration = 3})
+               Rayfield:Notify({Title = "Fehler", Content = "Welt " .. selectedWorld .. " nicht gefunden!"})
            end
        end)
 
-       if not success then
-           warn("Callback Error: " .. tostring(err))
-           Rayfield:Notify({Title = "Script Fehler", Content = "Pfad im Menü ist anders als erwartet.", Duration = 5})
-       end
+       if not success then warn("Fehler: " .. tostring(err)) end
    end,
 })
