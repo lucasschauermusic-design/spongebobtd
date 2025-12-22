@@ -1,5 +1,5 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Timer Killer", LoadingTitle = "Lade Konfiguration..."})
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Map Tester", LoadingTitle = "Lade Test-Modus..."})
 local MainTab = Window:CreateTab("Main", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -40,7 +40,7 @@ local function DeepFind(name, className)
     return nil
 end
 
-MainTab:CreateSection("Konfiguration")
+MainTab:CreateSection("Test-Konfiguration")
 
 MainTab:CreateDropdown({
     Name = "Wähle Map",
@@ -66,10 +66,10 @@ MainTab:CreateDropdown({
     end,
 })
 
-MainTab:CreateSection("Aktion")
+MainTab:CreateSection("Test-Aktion")
 
 MainTab:CreateButton({
-    Name = "🚀 FULL AUTO START",
+    Name = "🛠️ TEST: NUR MAP AUSWÄHLEN",
     Callback = function()
         local signalEvent = DeepFind("Replica_ReplicaSignal", "RemoteEvent")
         local createEvent = DeepFind("Replica_ReplicaCreate", "RemoteEvent")
@@ -81,7 +81,7 @@ MainTab:CreateButton({
 
         local currentLobbyID = nil
         
-        -- Dynamisches Abfangen der Lobby-ID
+        -- Listener für die Lobby ID
         local connection
         connection = createEvent.OnClientEvent:Connect(function(...)
             local args = {...}
@@ -91,7 +91,7 @@ MainTab:CreateButton({
             end
         end)
 
-        -- 1. Teleport zur Queue
+        -- 1. In die Queue gehen
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
 
         -- 2. Warten auf ID
@@ -99,11 +99,12 @@ MainTab:CreateButton({
         while not currentLobbyID and (tick() - timeout < 10) do task.wait(0.1) end
         
         if currentLobbyID then
-            Rayfield:Notify({Title="Lobby ID gefunden", Content="ID: " .. tostring(currentLobbyID)})
-            task.wait(1.2) -- Wartezeit für Serverstabilität
+            Rayfield:Notify({Title="Lobby bereit", Content="ID: " .. tostring(currentLobbyID) .. " | Sende Daten..."})
             
-            -- EXAKTE REPLIKATION DEINER LOGS:
-            -- Wir nutzen table.unpack für die identische Struktur
+            -- WICHTIG: Längere Pause, damit der Server die Lobby registriert
+            task.wait(2.0) 
+            
+            -- EXAKTE REPLIKATION DEINER LOGS (Ohne StartGame!)
             local packet = {
                 [1] = currentLobbyID,
                 [2] = "ConfirmMap",
@@ -115,18 +116,13 @@ MainTab:CreateButton({
                 }
             }
             
-            -- Signal senden
+            -- Signal senden (genau wie Call #1 - #7)
             signalEvent:FireServer(table.unpack(packet))
             
-            task.wait(0.8)
-            
-            -- 4. START SIGNAL (Screenshot-Fix)
-            signalEvent:FireServer(currentLobbyID, "StartGame")
-            
-            Rayfield:Notify({Title="Erfolg", Content="Map gewählt & Start gefeuert!"})
+            Rayfield:Notify({Title="Gesendet", Content="Überprüfe jetzt, ob die Map gewählt wurde!"})
         else
             if connection then connection:Disconnect() end
-            Rayfield:Notify({Title="Fehler", Content="Timeout: Lobby ID nicht erhalten."})
+            Rayfield:Notify({Title="Fehler", Content="Lobby ID Zeitüberschreitung."})
         end
     end,
 })
