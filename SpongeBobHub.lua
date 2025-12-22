@@ -1,27 +1,26 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Timer Killer", LoadingTitle = "Lade..."})
-local MainTab = Window:CreateTab("Force Start", 4483362458)
+local MainTab = Window:CreateTab("Main", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- SETTINGS
+-- EINSTELLUNGEN
 local targetMap = "ConchStreet"
 local targetDifficulty = 1 
 local targetMode = "Game" 
 
--- 1. FastTravel
+-- FastTravel Modul finden
 local FastTravel = nil
-local scripts = LocalPlayer.PlayerScripts
-for _, mod in pairs(scripts:GetDescendants()) do
+for _, mod in pairs(LocalPlayer.PlayerScripts:GetDescendants()) do
     if mod.Name == "FastTravelController" and mod:IsA("ModuleScript") then
         pcall(function() FastTravel = require(mod) end)
         break
     end
 end
 
--- 2. SUCH-FUNKTIONEN
+-- Suchfunktion für Remotes
 local function DeepFind(name, className)
     for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
         if desc.Name == name and (not className or desc:IsA(className)) then
@@ -31,59 +30,45 @@ local function DeepFind(name, className)
     return nil
 end
 
-_G.LobbyID = nil
-_G.Signal = nil
-_G.Invoker = nil
-
 MainTab:CreateButton({
-    Name = "1. AUTO JOIN & SETUP",
+    Name = "🚀 FULL AUTO: JOIN & START",
     Callback = function()
-        if not FastTravel then Rayfield:Notify({Title="Fehler", Content="FastTravel fehlt"}) return end
-        
+        -- 1. Events finden
         local signalEvent = DeepFind("Replica_ReplicaSignal", "RemoteEvent")
         local createEvent = DeepFind("Replica_ReplicaCreate", "RemoteEvent")
-        -- WICHTIG: Wir suchen jetzt gezielt danach!
-        local startInvoker = DeepFind("MatchStartInvoker", "RemoteFunction")
         
-        if not signalEvent or not createEvent then 
-             Rayfield:Notify({Title="Fehler", Content="Replica Events fehlen"})
+        if not signalEvent or not createEvent or not FastTravel then 
+             Rayfield:Notify({Title="Fehler", Content="Module oder Events nicht gefunden!"})
              return 
         end
+
+        local currentLobbyID = nil
         
-        _G.Signal = signalEvent
-        _G.Invoker = startInvoker
-
-        if _G.Invoker then
-            Rayfield:Notify({Title="HOFFNUNG!", Content="MatchStartInvoker GEFUNDEN!"})
-            print("Invoker Pfad: ", _G.Invoker:GetFullName())
-        else
-            Rayfield:Notify({Title="Info", Content="Invoker nicht gefunden (Probiere Timer-Hack)"})
-        end
-
-        -- A) ID Listener
+        -- 2. Listener für die Lobby ID starten
         local connection
         connection = createEvent.OnClientEvent:Connect(function(...)
             local args = {...}
             if args[1] and type(args[1]) == "number" then
-                _G.LobbyID = args[1]
+                currentLobbyID = args[1]
                 connection:Disconnect()
             end
         end)
 
-        -- B) Teleport
+        -- 3. Teleport zur Queue
+        Rayfield:Notify({Title="Status", Content="Teleportiere zur Queue..."})
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
 
-        -- C) Warten
+        -- 4. Warten bis ID da ist (max 10 Sek)
         local start = tick()
-        while not _G.LobbyID and (tick() - start < 10) do task.wait(0.1) end
+        while not currentLobbyID and (tick() - start < 10) do task.wait(0.1) end
         
-        if _G.LobbyID then
-            Rayfield:Notify({Title="Lobby ID", Content=tostring(_G.LobbyID)})
-            task.wait(0.5)
+        if currentLobbyID then
+            Rayfield:Notify({Title="ID Gefunden", Content="Lobby: " .. tostring(currentLobbyID)})
+            task.wait(0.3)
             
-            -- Map Config
+            -- 5. Map bestätigen (ConfirmMap)
             local confirmArgs = {
-                [1] = _G.LobbyID,
+                [1] = currentLobbyID,
                 [2] = "ConfirmMap",
                 [3] = {
                     ["Difficulty"] = targetDifficulty,
@@ -94,63 +79,19 @@ MainTab:CreateButton({
                 }
             }
             signalEvent:FireServer(unpack(confirmArgs))
-            Rayfield:Notify({Title="Bereit", Content="Drücke jetzt die Test-Buttons!"})
-        end
-    end,
-})
-
-MainTab:CreateSection("DIE NEUEN VERSUCHE")
-
-MainTab:CreateButton({
-    Name = "Test A: MatchStartInvoker (Function)",
-    Callback = function()
-        if _G.Invoker and _G.LobbyID then
-            print("Rufe MatchStartInvoker auf...")
-            local success, res = pcall(function()
-                return _G.Invoker:InvokeServer(_G.LobbyID)
-            end)
-            if success then
-                Rayfield:Notify({Title="Result", Content=tostring(res)})
-            else
-                Rayfield:Notify({Title="Fehler", Content="Invoker fehlgeschlagen"})
-            end
+            
+            task.wait(0.2) -- Kurze Pause für den Server
+            
+            -- 6. FORCE START (Das Signal aus deinem Screenshot)
+            signalEvent:FireServer(currentLobbyID, "StartGame")
+            
+            Rayfield:Notify({Title="Erfolg", Content="Start-Signal gesendet!"})
         else
-            Rayfield:Notify({Title="Fehler", Content="Invoker nicht gefunden!"})
+            if connection then connection:Disconnect() end
+            Rayfield:Notify({Title="Timeout", Content="Keine Lobby ID erhalten."})
         end
     end,
 })
 
-MainTab:CreateButton({
-    Name = "Test B: Timer auf 0 setzen (Replica)",
-    Callback = function()
-        if _G.Signal and _G.LobbyID then
-            -- Versuch: Wir tun so, als ob wir die Lobby-Daten updaten wollen
-            -- Argumentstruktur geraten basierend auf ReplicaCreate
-            local updateArgs = {
-                [1] = _G.LobbyID,
-                [2] = {
-                    ["selectionTimeLeft"] = 0
-                }
-            }
-            _G.Signal:FireServer(unpack(updateArgs))
-            print("Gesendet: Timer auf 0 setzen")
-        end
-    end,
-})
-
-MainTab:CreateButton({
-    Name = "Test C: Timer Hack (Alternative)",
-    Callback = function()
-        if _G.Signal and _G.LobbyID then
-            -- Andere Struktur probieren
-            local updateArgs = {
-                [1] = _G.LobbyID,
-                [2] = "SetValue", -- Oft genutzt bei Replica
-                [3] = "selectionTimeLeft",
-                [4] = 0
-            }
-            _G.Signal:FireServer(unpack(updateArgs))
-            print("Gesendet: SetValue Timer")
-        end
-    end,
-})
+MainTab:CreateSection("Info")
+MainTab:CreateLabel("Script wartet nach Klick automatisch auf ID")
