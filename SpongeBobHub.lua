@@ -1,16 +1,17 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Auto-Joiner", LoadingTitle = "Lade..."})
-local MainTab = Window:CreateTab("Complete", 4483362458)
+local Window = Rayfield:CreateWindow({Name = "DEBUG MODUS", LoadingTitle = "Lade..."})
+local MainTab = Window:CreateTab("Debug", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- === EINSTELLUNGEN ===
-local targetMap = "ConchStreet" 
-local targetDifficulty = 1 
-local targetEndless = false
-local targetMode = "Game" -- WICHTIG: "Game" laut deinem Spy-Log
+-- DEBUG LOGGER
+local function Log(msg)
+    print("[DEBUG] " .. msg)
+    -- Optional: Auch als Notify anzeigen
+    -- Rayfield:Notify({Title="Debug", Content=msg})
+end
 
 -- 1. FastTravel
 local FastTravel = nil
@@ -22,148 +23,148 @@ for _, mod in pairs(scripts:GetDescendants()) do
     end
 end
 
--- 2. Knit Services (Hide & Teleport)
-local function GetKnitFunctions()
-    local packages = ReplicatedStorage:FindFirstChild("Packages")
-    if not packages then return nil end
-    local index = packages:FindFirstChild("_Index")
-    if not index then return nil end
-
-    for _, child in pairs(index:GetChildren()) do
-        if string.find(child.Name, "acecateer_knit") then
-            local services = child:FindFirstChild("knit") and child.knit:FindFirstChild("Services")
-            local teleportService = services and services:FindFirstChild("PlaceTeleportService")
-            
-            if teleportService then
-                local rf = teleportService:FindFirstChild("RF")
-                if rf then
-                    return {
-                        HideCharacter = rf:FindFirstChild("HideCharacter"),
-                        Teleport = rf:FindFirstChild("Teleport")
-                    }
-                end
+-- 2. Signal Sucher mit Print-Ausgabe
+local function FindSignalDebug()
+    Log("Suche ReplicaRemoteSignal...")
+    
+    -- Schritt 1: Standard Ordner prüfen
+    local folder = ReplicatedStorage:FindFirstChild("ReplicaRemoteEvents")
+    if folder then
+        Log("Ordner 'ReplicaRemoteEvents' gefunden.")
+        local sig = folder:FindFirstChild("Replica_ReplicaSignal")
+        if sig then
+            Log(">>> SIGNAL GEFUNDEN (Standard): " .. sig:GetFullName())
+            return sig
+        else
+            Log("Signal NICHT im Standard-Ordner.")
+            Log("Inhalt des Ordners:")
+            for _, c in pairs(folder:GetChildren()) do
+                print(" - " .. c.Name .. " (" .. c.ClassName .. ")")
             end
         end
+    else
+        Log("Ordner 'ReplicaRemoteEvents' NICHT gefunden!")
     end
+
+    -- Schritt 2: Deep Search
+    Log("Starte Deep Search im gesamten ReplicatedStorage...")
+    for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
+        if desc.Name == "Replica_ReplicaSignal" then
+            Log(">>> SIGNAL GEFUNDEN (Deep Search): " .. desc:GetFullName())
+            return desc
+        end
+    end
+    
+    Log("!!! CRITICAL: Signal nirgendwo gefunden !!!")
     return nil
 end
 
-MainTab:CreateInput({
-    Name = "Map Name",
-    PlaceholderText = "ConchStreet",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(text) targetMap = text end,
-})
-
 MainTab:CreateButton({
-    Name = "AUTO START (Combo)",
+    Name = "DEBUG START (Nur Setup - Kein TP)",
     Callback = function()
+        print("\n\n=== START DEBUG LAUF ===")
+        
+        -- A) FastTravel Check
         if not FastTravel then 
-            Rayfield:Notify({Title="Fehler", Content="FastTravel fehlt!"})
+            Log("FEHLER: FastTravel Module fehlt!") 
             return 
+        else
+            Log("FastTravel Module geladen.")
         end
 
-        local knitFuncs = GetKnitFunctions()
-        if not knitFuncs or not knitFuncs.HideCharacter or not knitFuncs.Teleport then
-            Rayfield:Notify({Title="Fehler", Content="Knit Funktionen fehlen!"})
+        -- B) Signal Suchen
+        local signalEvent = FindSignalDebug()
+        if not signalEvent then
+            Rayfield:Notify({Title="FEHLER", Content="Siehe F9 Konsole!"})
             return
         end
 
-        local remoteFolder = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents", 10)
-        local createEvent = remoteFolder:WaitForChild("Replica_ReplicaCreate", 10)
-        local signalEvent = remoteFolder:WaitForChild("Replica_ReplicaSignal", 10)
-
-        if not signalEvent then 
-            Rayfield:Notify({Title="Fehler", Content="Replica Signal fehlt!"})
-            return 
+        -- C) ID Event suchen (meistens im gleichen Ordner)
+        local createEvent = nil
+        if signalEvent.Parent then
+            createEvent = signalEvent.Parent:FindFirstChild("Replica_ReplicaCreate")
+        end
+        
+        if not createEvent then
+            Log("Warnung: ReplicaCreate nicht neben Signal gefunden. Suche global...")
+            for _, d in pairs(ReplicatedStorage:GetDescendants()) do
+                if d.Name == "Replica_ReplicaCreate" then 
+                    createEvent = d 
+                    Log("Create Event gefunden bei: " .. d:GetFullName())
+                    break 
+                end
+            end
         end
 
-        Rayfield:Notify({Title="Status", Content="Suche freien Platz..."})
-
-        -- A) LISTENER
+        -- D) Listener Setup
         local capturedID = nil
         local connection = nil
-        connection = createEvent.OnClientEvent:Connect(function(...)
-            local args = {...}
-            if args[1] and type(args[1]) == "number" then
-                capturedID = args[1]
-                connection:Disconnect()
-            end
-        end)
+        if createEvent then
+            Log("Listener aktiviert. Warte auf Event...")
+            connection = createEvent.OnClientEvent:Connect(function(...)
+                local args = {...}
+                Log("Event empfangen! Args: " .. tostring(args[1]))
+                if args[1] and type(args[1]) == "number" then
+                    capturedID = args[1]
+                    Log("ID gespeichert: " .. capturedID)
+                    connection:Disconnect()
+                end
+            end)
+        else
+            Log("FEHLER: CreateEvent fehlt, kann ID nicht abfangen.")
+            return
+        end
 
-        -- B) TELEPORT ZUR LOBBY
+        -- E) Teleport zum Kreis (AutoJoin)
+        Log("Führe AutoJoin aus...")
         task.spawn(function()
             FastTravel:_attemptTeleportToEmptyQueue()
         end)
 
-        -- C) WARTEN AUF ID
+        -- F) Warten auf ID
         local start = tick()
         while not capturedID and (tick() - start < 10) do task.wait(0.1) end
         if connection then connection:Disconnect() end
 
         if capturedID then
-            Rayfield:Notify({Title="Gefunden!", Content="Lobby ID: " .. capturedID})
-            task.wait(0.8)
+            Rayfield:Notify({Title="ID Gefunden", Content=tostring(capturedID)})
+            Log("--- LOBBY SETUP BEGINNT ---")
+            task.wait(1.0)
 
-            -- D) MAP BESTÄTIGEN
+            -- G) ConfirmMap senden
+            -- Wir nutzen exakt deine Werte
             local confirmArgs = {
                 [1] = capturedID,
                 [2] = "ConfirmMap",
                 [3] = {
-                    ["Difficulty"] = targetDifficulty,
+                    ["Difficulty"] = 1,
                     ["Chapter"] = 1,
-                    ["Endless"] = targetEndless,
-                    ["World"] = targetMap,
-                    ["Mode"] = targetMode 
+                    ["Endless"] = false,
+                    ["World"] = "ConchStreet",
+                    ["Mode"] = "Game" 
                 }
             }
-            signalEvent:FireServer(unpack(confirmArgs))
-            print("Map Config gesendet.")
             
-            task.wait(1.5) -- Warten bis Config durch ist
-
-            -- E) START SIGNAL (Wichtig für Server-State!)
-            signalEvent:FireServer(capturedID, "RequestStart")
-            signalEvent:FireServer(capturedID, "Start")
-            print("Start Request gesendet.")
-            Rayfield:Notify({Title="Status", Content="Starten..."})
-
-            task.wait(1.0) -- Warten bis Lobby-Status auf "Started" wechselt
-
-            -- F) KOMBINATION: HIDE + TELEPORT
-            -- 1. Charakter verstecken (Visuals)
-            pcall(function() knitFuncs.HideCharacter:InvokeServer() end)
-            
-            task.wait(0.5) -- Kurze Pause für den Effekt
-
-            -- 2. Tatsächlichen Teleport auslösen (Transport)
-            Rayfield:Notify({Title="Finale", Content="Sende Teleport Befehl..."})
-            
-            local teleportArgs = {
-                targetMode,      -- "Game"
-                targetMap,       -- "ConchStreet"
-                targetDifficulty,-- 1
-                targetEndless    -- false
-            }
-            
-            local success, result = pcall(function()
-                return knitFuncs.Teleport:InvokeServer(unpack(teleportArgs))
+            Log("Sende 'ConfirmMap'...")
+            pcall(function() 
+                signalEvent:FireServer(unpack(confirmArgs)) 
             end)
+            Log("ConfirmMap gesendet. (Schau auf das Lobby-Schild!)")
+            
+            task.wait(2.0) -- Zeit zum Beobachten
 
-            if success then
-                print("Teleport Result:", result)
-                if result == "Success" or result == true then
-                    Rayfield:Notify({Title="Erfolg", Content="Reise beginnt!"})
-                else
-                    -- Falls der Server eine Meldung zurückgibt
-                    Rayfield:Notify({Title="Info", Content="Status: " .. tostring(result)})
-                end
-            else
-                warn("Teleport Fehler:", result)
-            end
+            -- H) RequestStart senden
+            Log("Sende 'RequestStart' & 'Start'...")
+            pcall(function() signalEvent:FireServer(capturedID, "RequestStart") end)
+            pcall(function() signalEvent:FireServer(capturedID, "Start") end)
+            
+            Rayfield:Notify({Title="Fertig", Content="Signale gesendet. KEIN Teleport."})
+            Log("--- DEBUG ENDE ---")
+            Log("Bitte prüfen: Startet der Countdown? Zeigt das Schild die Map?")
 
         else
-            Rayfield:Notify({Title="Fehler", Content="Keine Lobby ID erhalten."})
+            Log("TIMEOUT: Keine ID empfangen. Bist du auf dem Kreis gelandet?")
+            Rayfield:Notify({Title="Fehler", Content="Keine ID (Timeout)"})
         end
     end,
 })
