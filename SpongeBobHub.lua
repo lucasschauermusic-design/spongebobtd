@@ -12,7 +12,6 @@ local selectedChapter = 1
 local selectedDifficulty = 1
 local selectedMode = "Game"
 
--- Maps aus deinen Screenshots
 local mapList = {
     "ChumBucket", 
     "ConchStreet", 
@@ -32,7 +31,7 @@ for _, mod in pairs(LocalPlayer.PlayerScripts:GetDescendants()) do
     end
 end
 
--- Suchfunktion
+-- Suchfunktion für Remotes
 local function DeepFind(name, className)
     for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
         if desc.Name == name and (not className or desc:IsA(className)) then
@@ -42,8 +41,9 @@ local function DeepFind(name, className)
     return nil
 end
 
-MainTab:CreateSection("Map & Schwierigkeit")
+MainTab:CreateSection("Konfiguration")
 
+-- Map Dropdown
 MainTab:CreateDropdown({
     Name = "Wähle Map",
     Options = mapList,
@@ -51,6 +51,15 @@ MainTab:CreateDropdown({
     Callback = function(Option) selectedMap = Option end,
 })
 
+-- Chapter Dropdown (Neu statt Buttons)
+MainTab:CreateDropdown({
+    Name = "Wähle Chapter",
+    Options = {"1","2","3","4","5","6","7","8","9","10"},
+    CurrentOption = "1",
+    Callback = function(Option) selectedChapter = tonumber(Option) end,
+})
+
+-- Difficulty Dropdown (Werte 1-4)
 MainTab:CreateDropdown({
     Name = "Schwierigkeit",
     Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
@@ -58,24 +67,6 @@ MainTab:CreateDropdown({
     Callback = function(Option)
         local diffs = {Normal = 1, Hard = 2, Nightmare = 3, DavyJones = 4}
         selectedDifficulty = diffs[Option] or 1
-    end,
-})
-
--- Chapter Auswahl nebeneinander (Rayfield nutzt vertikale Listen, 
--- daher gruppieren wir sie in kleine Sections für bessere Übersicht)
-MainTab:CreateSection("Chapter Auswahl (Aktuell: " .. tostring(selectedChapter) .. ")")
-
--- Um sie optisch "nebeneinander" zu wirken, nutzen wir hier eine kompakte Darstellung
-local chaps = {}
-for i = 1, 10 do table.insert(chaps, tostring(i)) end
-
-MainTab:CreateDropdown({
-    Name = "Schnellwahl Chapter",
-    Options = chaps,
-    CurrentOption = "1",
-    Callback = function(Option)
-        selectedChapter = tonumber(Option)
-        Rayfield:Notify({Title = "Kapitel", Content = "Kapitel " .. Option .. " gewählt."})
     end,
 })
 
@@ -94,7 +85,7 @@ MainTab:CreateButton({
 
         local currentLobbyID = nil
         
-        -- Listener für die ID
+        -- Listener für die Lobby ID
         local connection
         connection = createEvent.OnClientEvent:Connect(function(...)
             local args = {...}
@@ -104,41 +95,40 @@ MainTab:CreateButton({
             end
         end)
 
-        -- 1. Teleport
-        Rayfield:Notify({Title="Schritt 1", Content="Teleport zur Queue..."})
+        -- 1. In die Queue gehen
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
 
         -- 2. Warten auf ID
-        local start = tick()
-        while not currentLobbyID and (tick() - start < 10) do task.wait(0.1) end
+        local timeout = tick()
+        while not currentLobbyID and (tick() - timeout < 10) do task.wait(0.1) end
         
         if currentLobbyID then
-            Rayfield:Notify({Title="Schritt 2", Content="ID erhalten: " .. tostring(currentLobbyID)})
-            task.wait(0.8) -- Wichtig für Map-Erstellung
+            Rayfield:Notify({Title="ID Gefunden", Content="Starte Setup für Lobby: " .. tostring(currentLobbyID)})
+            task.wait(1.0) -- Erhöhte Pause für Server-Sync
             
-            -- 3. Map erstellen/bestätigen
-            local confirmArgs = {
-                [1] = currentLobbyID,
-                [2] = "ConfirmMap",
-                [3] = {
-                    ["Difficulty"] = selectedDifficulty,
-                    ["Chapter"] = selectedChapter,
-                    ["Endless"] = false,
-                    ["World"] = selectedMap,
-                    ["Mode"] = selectedMode 
-                }
+            -- 3. MAP ERSTELLEN (ConfirmMap)
+            -- Die Argumente müssen exakt in dieser Reihenfolge im Table sein
+            local mapConfig = {
+                ["Difficulty"] = selectedDifficulty,
+                ["Chapter"] = selectedChapter,
+                ["Endless"] = false,
+                ["World"] = selectedMap,
+                ["Mode"] = selectedMode 
             }
-            signalEvent:FireServer(unpack(confirmArgs))
-            print("ConfirmMap gesendet")
-
-            task.wait(0.6) -- Zeit lassen, damit das Spiel die Map lädt
             
-            -- 4. Start Signal (Dein Screenshot-Fix)
+            -- Wichtig: Erst die ID, dann der Command "ConfirmMap", dann das Config-Table
+            signalEvent:FireServer(currentLobbyID, "ConfirmMap", mapConfig)
+            
+            task.wait(0.8) -- Zeit für die Map-Erstellung lassen
+            
+            -- 4. START SIGNAL (Screenshot-Fix)
+            -- Wie in deinem Bild gesehen: ID gefolgt von "StartGame"
             signalEvent:FireServer(currentLobbyID, "StartGame")
-            Rayfield:Notify({Title="Erfolg", Content="Spiel wird gestartet!"})
+            
+            Rayfield:Notify({Title="Erfolg", Content="Map gewählt & Startbefehl gesendet!"})
         else
             if connection then connection:Disconnect() end
-            Rayfield:Notify({Title="Fehler", Content="Timeout: Keine Lobby ID."})
+            Rayfield:Notify({Title="Fehler", Content="Timeout: Keine Lobby ID erhalten."})
         end
     end,
 })
