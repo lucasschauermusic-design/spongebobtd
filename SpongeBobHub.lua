@@ -1,15 +1,15 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SpongeBob TD: Simple Map Selector",
-   LoadingTitle = "Lade Map-Logik...",
+   Name = "SpongeBob TD: Map Selector",
+   LoadingTitle = "Lade Auswahl-Logik...",
 })
 
 local MainTab = Window:CreateTab("Welten", 4483362458)
 
 local selectedWorld = "ChumBucket"
 
--- Dropdown nur für die Welten
+-- Dropdown für die Welten
 MainTab:CreateDropdown({
    Name = "Welt wählen",
    Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
@@ -31,27 +31,34 @@ MainTab:CreateButton({
        end
 
        local success, err = pcall(function()
-           -- Der Pfad, den du in Dex bestätigt hast
+           -- Der Pfad aus deinen Dex-Funden
            local worlds = screen.Main.SelectionScreen.Main.StageSelect.WorldSelect.Content.Stages
            local targetBtn = worlds:FindFirstChild(selectedWorld)
 
-           if targetBtn then
-               -- Simuliert den Klick auf die Map
+           if targetBtn and targetBtn:IsA("GuiObject") then
+               -- Wir versuchen mehrere Signale, damit das Spiel die Auswahl erzwingt
                if firesignal then
+                   firesignal(targetBtn.MouseButton1Down)
+                   task.wait(0.05)
+                   firesignal(targetBtn.MouseButton1Up)
+                   task.wait(0.05)
                    firesignal(targetBtn.MouseButton1Click)
                else
-                   -- Alternative Methode für andere Executor
-                   for _, v in pairs(getconnections(targetBtn.MouseButton1Click)) do
-                       v:Fire()
+                   -- Fallback für andere Executor
+                   for _, connection in pairs(getconnections(targetBtn.MouseButton1Click)) do
+                       connection:Fire()
                    end
                end
                
-               Rayfield:Notify({Title = "Erfolg", Content = selectedWorld .. " wurde markiert!"})
+               Rayfield:Notify({Title = "Erfolg", Content = selectedWorld .. " wurde angewählt!"})
            else
                Rayfield:Notify({Title = "Fehler", Content = "Welt " .. selectedWorld .. " nicht gefunden!"})
            end
        end)
 
-       if not success then warn("Fehler: " .. tostring(err)) end
+       if not success then 
+           warn("Fehler im Script: " .. tostring(err)) 
+           Rayfield:Notify({Title = "Callback Error", Content = "Prüfe die Konsole (F9)"})
+       end
    end,
 })
