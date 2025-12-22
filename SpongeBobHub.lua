@@ -1,6 +1,6 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Auto-Joiner", LoadingTitle = "Lade..."})
-local MainTab = Window:CreateTab("Finale", 4483362458)
+local MainTab = Window:CreateTab("Complete", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
@@ -10,7 +10,7 @@ local LocalPlayer = Players.LocalPlayer
 local targetMap = "ConchStreet" 
 local targetDifficulty = 1 
 local targetEndless = false
-local targetMode = "Game" 
+local targetMode = "Game" -- WICHTIG: "Game" laut deinem Spy-Log
 
 -- 1. FastTravel
 local FastTravel = nil
@@ -22,7 +22,7 @@ for _, mod in pairs(scripts:GetDescendants()) do
     end
 end
 
--- 2. Knit Services (HideCharacter)
+-- 2. Knit Services (Hide & Teleport)
 local function GetKnitFunctions()
     local packages = ReplicatedStorage:FindFirstChild("Packages")
     if not packages then return nil end
@@ -56,7 +56,7 @@ MainTab:CreateInput({
 })
 
 MainTab:CreateButton({
-    Name = "AUTO START (Mit Wartezeit)",
+    Name = "AUTO START (Combo)",
     Callback = function()
         if not FastTravel then 
             Rayfield:Notify({Title="Fehler", Content="FastTravel fehlt!"})
@@ -64,24 +64,23 @@ MainTab:CreateButton({
         end
 
         local knitFuncs = GetKnitFunctions()
-        if not knitFuncs or not knitFuncs.HideCharacter then
-            Rayfield:Notify({Title="Fehler", Content="HideCharacter fehlt!"})
+        if not knitFuncs or not knitFuncs.HideCharacter or not knitFuncs.Teleport then
+            Rayfield:Notify({Title="Fehler", Content="Knit Funktionen fehlen!"})
             return
         end
 
-        -- A) PFADE FINDEN (Die sichere Methode von vorhin)
         local remoteFolder = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents", 10)
         local createEvent = remoteFolder:WaitForChild("Replica_ReplicaCreate", 10)
         local signalEvent = remoteFolder:WaitForChild("Replica_ReplicaSignal", 10)
 
         if not signalEvent then 
-            Rayfield:Notify({Title="Fehler", Content="Replica Signal nicht gefunden!"})
+            Rayfield:Notify({Title="Fehler", Content="Replica Signal fehlt!"})
             return 
         end
 
         Rayfield:Notify({Title="Status", Content="Suche freien Platz..."})
 
-        -- B) LISTENER
+        -- A) LISTENER
         local capturedID = nil
         local connection = nil
         connection = createEvent.OnClientEvent:Connect(function(...)
@@ -92,23 +91,21 @@ MainTab:CreateButton({
             end
         end)
 
-        -- C) TELEPORT
+        -- B) TELEPORT ZUR LOBBY
         task.spawn(function()
             FastTravel:_attemptTeleportToEmptyQueue()
         end)
 
-        -- D) WARTEN AUF ID
+        -- C) WARTEN AUF ID
         local start = tick()
         while not capturedID and (tick() - start < 10) do task.wait(0.1) end
         if connection then connection:Disconnect() end
 
         if capturedID then
             Rayfield:Notify({Title="Gefunden!", Content="Lobby ID: " .. capturedID})
-            
-            -- WICHTIG: Kurz warten, damit wir sicher stehen
             task.wait(0.8)
 
-            -- E) MAP BESTÄTIGEN
+            -- D) MAP BESTÄTIGEN
             local confirmArgs = {
                 [1] = capturedID,
                 [2] = "ConfirmMap",
@@ -121,34 +118,48 @@ MainTab:CreateButton({
                 }
             }
             signalEvent:FireServer(unpack(confirmArgs))
-            print(">>> Map Config gesendet.")
-            Rayfield:Notify({Title="Schritt 1", Content="Map ausgewählt."})
+            print("Map Config gesendet.")
             
-            -- === DER FIX: LANGE WARTEZEIT ===
-            -- Wir geben dem Server volle 2 Sekunden, um die Map anzuzeigen/zu speichern
-            -- Bevor wir Start drücken.
-            task.wait(2.0)
+            task.wait(1.5) -- Warten bis Config durch ist
 
-            -- F) START DRÜCKEN
+            -- E) START SIGNAL (Wichtig für Server-State!)
             signalEvent:FireServer(capturedID, "RequestStart")
             signalEvent:FireServer(capturedID, "Start")
-            print(">>> Start Request gesendet.")
-            Rayfield:Notify({Title="Schritt 2", Content="Start gedrückt."})
+            print("Start Request gesendet.")
+            Rayfield:Notify({Title="Status", Content="Starten..."})
 
-            task.wait(1.0) 
+            task.wait(1.0) -- Warten bis Lobby-Status auf "Started" wechselt
 
-            -- G) HIDE CHARACTER (Trigger Teleport)
-            Rayfield:Notify({Title="Finale", Content="Ladebildschirm..."})
+            -- F) KOMBINATION: HIDE + TELEPORT
+            -- 1. Charakter verstecken (Visuals)
+            pcall(function() knitFuncs.HideCharacter:InvokeServer() end)
             
-            local success, err = pcall(function()
-                knitFuncs.HideCharacter:InvokeServer()
+            task.wait(0.5) -- Kurze Pause für den Effekt
+
+            -- 2. Tatsächlichen Teleport auslösen (Transport)
+            Rayfield:Notify({Title="Finale", Content="Sende Teleport Befehl..."})
+            
+            local teleportArgs = {
+                targetMode,      -- "Game"
+                targetMap,       -- "ConchStreet"
+                targetDifficulty,-- 1
+                targetEndless    -- false
+            }
+            
+            local success, result = pcall(function()
+                return knitFuncs.Teleport:InvokeServer(unpack(teleportArgs))
             end)
 
             if success then
-                print("HideCharacter ausgeführt!")
-                Rayfield:Notify({Title="Erfolg", Content="Teleport läuft!"})
+                print("Teleport Result:", result)
+                if result == "Success" or result == true then
+                    Rayfield:Notify({Title="Erfolg", Content="Reise beginnt!"})
+                else
+                    -- Falls der Server eine Meldung zurückgibt
+                    Rayfield:Notify({Title="Info", Content="Status: " .. tostring(result)})
+                end
             else
-                warn("HideCharacter Fehler:", err)
+                warn("Teleport Fehler:", result)
             end
 
         else
