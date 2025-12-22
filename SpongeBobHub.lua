@@ -1,27 +1,17 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Ultimate Auto-Start", LoadingTitle = "Lade Live-System..."})
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Map Force", LoadingTitle = "Lade Fix..."})
 local MainTab = Window:CreateTab("Main", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- AKTUELLE AUSWAHL
-local selectedMap = "ConchStreet"
+-- EINSTELLUNGEN
+local selectedMap = "ChumBucket"
 local selectedChapter = 1
 local selectedDifficulty = 1
 
-local mapList = {
-    "ChumBucket", 
-    "ConchStreet", 
-    "JellyfishFields", 
-    "KampKoral", 
-    "KrustyKrab", 
-    "RockBottom", 
-    "SandysTreedome"
-}
-
--- FastTravel Modul
+-- FastTravel Modul finden
 local FastTravel = nil
 for _, mod in pairs(LocalPlayer.PlayerScripts:GetDescendants()) do
     if mod.Name == "FastTravelController" and mod:IsA("ModuleScript") then
@@ -30,20 +20,11 @@ for _, mod in pairs(LocalPlayer.PlayerScripts:GetDescendants()) do
     end
 end
 
-MainTab:CreateSection("Konfiguration")
-
 MainTab:CreateDropdown({
     Name = "Wähle Map",
-    Options = mapList,
-    CurrentOption = "ConchStreet",
+    Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
+    CurrentOption = "ChumBucket",
     Callback = function(Option) selectedMap = Option end,
-})
-
-MainTab:CreateDropdown({
-    Name = "Wähle Chapter",
-    Options = {"1","2","3","4","5","6","7","8","9","10"},
-    CurrentOption = "1",
-    Callback = function(Option) selectedChapter = tonumber(Option) end,
 })
 
 MainTab:CreateDropdown({
@@ -51,34 +32,26 @@ MainTab:CreateDropdown({
     Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
     CurrentOption = "Normal",
     Callback = function(Option)
-        local diffs = {["Normal"] = 1, ["Hard"] = 2, ["Nightmare"] = 3, ["DavyJones"] = 4}
+        local diffs = {Normal = 1, Hard = 2, Nightmare = 3, DavyJones = 4}
         selectedDifficulty = diffs[Option] or 1
     end,
 })
 
-MainTab:CreateSection("Aktion")
-
 MainTab:CreateButton({
-    Name = "🚀 START LIVE-AUTO-JOIN",
+    Name = "🚀 FORCE START (MAP FIX)",
     Callback = function()
         local signalEvent = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents"):WaitForChild("Replica_ReplicaSignal")
         local createEvent = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents"):WaitForChild("Replica_ReplicaCreate")
         
-        if not FastTravel then 
-            Rayfield:Notify({Title="Fehler", Content="FastTravel-Modul fehlt!"})
-            return 
-        end
-
-        -- LISTENER STARTEN (Wartet auf Lobby-ID)
+        -- LISTENER ZUERST STARTEN
         local connection
         connection = createEvent.OnClientEvent:Connect(function(lobbyID)
             if type(lobbyID) == "number" then
                 connection:Disconnect() 
                 
-                -- Warten für Server-Sync (exakt wie im erfolgreichen Test)
-                task.wait(2.2)
+                -- 1. Kurze Pause für Initialisierung
+                task.wait(1.5) 
                 
-                -- MAP-DATEN SENDEN
                 local packet = {
                     [1] = lobbyID,
                     [2] = "ConfirmMap",
@@ -90,19 +63,27 @@ MainTab:CreateButton({
                     }
                 }
                 
-                -- Das Signal feuern
-                signalEvent:FireServer(table.unpack(packet))
+                -- 2. MAP AUSWAHL ERZWINGEN (3x senden zur Sicherheit)
+                -- Das stellt sicher, dass der Server die Wahl nicht wegen Timing-Fehlern ignoriert
+                for i = 1, 3 do
+                    signalEvent:FireServer(table.unpack(packet))
+                    task.wait(0.5)
+                end
                 
-                -- Kurze Pause und dann StartGame
-                task.wait(1.5)
+                warn("Map-Daten mehrfach gesendet: " .. selectedMap)
+                
+                -- 3. Längere Pause vor dem Start
+                task.wait(2.0)
+                
+                -- 4. Spiel erst starten, wenn Map sicher gewählt wurde
                 signalEvent:FireServer(lobbyID, "StartGame")
-                
-                Rayfield:Notify({Title="Erfolg", Content="Map gewählt & Start gefeuert!"})
+                Rayfield:Notify({Title="Erfolg", Content="Map erzwungen und gestartet!"})
             end
         end)
 
-        -- Teleport auslösen
-        Rayfield:Notify({Title="Status", Content="Suche Lobby..."})
-        task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
+        -- TELEPORT
+        if FastTravel then
+            task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
+        end
     end,
 })
