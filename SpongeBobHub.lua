@@ -1,62 +1,72 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
+-- 1. Fenster erstellen
 local Window = Rayfield:CreateWindow({
-   Name = "SpongeBob TD: Remote Bypass",
-   LoadingTitle = "Suche Server-Schnittstelle...",
+   Name = "SpongeBob TD: Final Knit",
+   LoadingTitle = "Verbinde mit FactionWorldController...",
 })
 
--- Sicherer Tab-Aufbau gegen den Nil-Error
+-- 2. Tab erstellen und aktiv warten, bis es existiert (Fix für Nil-Error)
 local MainTab = Window:CreateTab("Welten", 4483362458)
+while not MainTab do task.wait(0.1) end -- Warteschleife gegen den Absturz
+
 local selectedWorld = "ChumBucket"
 
-if MainTab then
-    MainTab:CreateDropdown({
-       Name = "Welt wählen",
-       Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
-       CurrentOption = {"ChumBucket"},
-       Callback = function(Option) selectedWorld = Option[1] end,
-    })
+-- 3. Dropdown hinzufügen
+MainTab:CreateDropdown({
+   Name = "Welt wählen",
+   Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
+   CurrentOption = {"ChumBucket"},
+   Callback = function(Option) selectedWorld = Option[1] end,
+})
 
-    MainTab:CreateButton({
-       Name = "Welt-Auswahl erzwingen",
-       Callback = function()
-           local success, err = pcall(function()
-               -- 1. Wir suchen alle Funk-Schnittstellen (Remotes) in Knit
-               local replicatedStorage = game:GetService("ReplicatedStorage")
-               
-               -- 2. SCHRITT: WELT (Deine Reihenfolge!)
-               -- Wir suchen nach Remotes, die 'World' im Namen haben
-               for _, v in pairs(replicatedStorage:GetDescendants()) do
-                   if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
-                       if v.Name:find("SelectWorld") or v.Name:find("SetWorld") then
-                           if v:IsA("RemoteEvent") then v:FireServer(selectedWorld) 
-                           else v:InvokeServer(selectedWorld) end
-                           print("Signal gesendet an: " .. v.Name .. " mit Welt: " .. selectedWorld)
-                       end
-                   end
-               end
+-- 4. Der Button mit der Knit-Logik aus deinem Fund
+MainTab:CreateButton({
+   Name = "Welt-Auswahl erzwingen",
+   Callback = function()
+       print("--- START: Knit-Sequenz ---") -- Dies MUSS jetzt im Log stehen!
+       
+       local success, err = pcall(function()
+           -- Knit-Framework abrufen
+           local Knit = game:GetService("ReplicatedStorage"):FindFirstChild("Knit", true)
+           if not Knit then 
+               print("Knit-Framework nicht im ReplicatedStorage gefunden!")
+               return 
+           end
+           
+           local KnitClient = require(Knit.Parent.Knit)
+           
+           -- Controller aus deinem Screenshot ansprechen
+           local worldCtrl = KnitClient.GetController("FactionWorldController")
+           local uiCtrl = KnitClient.GetController("UIController")
 
-               task.wait(0.5)
+           -- DEINE REIHENFOLGE: Erst Welt, dann Kapitel
+           if worldCtrl then
+               print("Sende SelectWorld an FactionWorldController: " .. selectedWorld)
+               worldCtrl:SelectWorld(selectedWorld)
+           else
+               print("FactionWorldController nicht gefunden!")
+           end
 
-               -- 3. SCHRITT: KAPITEL
-               for _, v in pairs(replicatedStorage:GetDescendants()) do
-                   if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
-                       if v.Name:find("SelectChapter") or v.Name:find("SetChapter") then
-                           if v:IsA("RemoteEvent") then v:FireServer(1) 
-                           else v:InvokeServer(1) end
-                           print("Signal gesendet an: " .. v.Name .. " mit Kapitel 1")
-                       end
-                   end
-               end
-               
-               -- 4. ATTRIBUT-SYNC (Aus deinem Log)
-               local screen = game.Players.LocalPlayer.PlayerGui:FindFirstChild("QueueScreen")
-               if screen then screen:SetAttribute("Hidden", false) end
+           task.wait(0.8) -- Sicherheits-Pause für die Server-Synchronisation
 
-               Rayfield:Notify({Title = "Server-Sync", Content = "Remote-Signale für " .. selectedWorld .. " abgefeuert!"})
-           end)
+           if uiCtrl then
+               print("Sende SelectChapter(1) an UIController...")
+               uiCtrl:SelectChapter(1)
+           else
+               print("UIController nicht gefunden!")
+           end
+           
+           -- UI-Attribut erzwingen (aus deinem Log)
+           local screen = game.Players.LocalPlayer.PlayerGui:FindFirstChild("QueueScreen")
+           if screen then screen:SetAttribute("Hidden", false) end
+       end)
 
-           if not success then warn("Remote-Fehler: " .. tostring(err)) end
-       end,
-    })
-end
+       if success then
+           print("--- ENDE: Sequenz erfolgreich gesendet ---")
+           Rayfield:Notify({Title = "Erfolg", Content = "Knit-Befehle wurden abgesetzt!"})
+       else
+           warn("Kritischer Knit-Fehler: " .. tostring(err))
+       end
+   end,
+})
