@@ -1,5 +1,5 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Auto-Joiner", LoadingTitle = "Lade System..."})
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Auto-Joiner", LoadingTitle = "Lade..."})
 local MainTab = Window:CreateTab("Auto-Join", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,10 +9,11 @@ local LocalPlayer = Players.LocalPlayer
 -- === EINSTELLUNGEN ===
 local targetMap = "ConchStreet" 
 local targetDifficulty = 1 
-local targetChapter = 1
 local targetEndless = false
+-- Laut deinem Spy Log muss hier "Game" stehen!
+local targetMode = "Game" 
 
--- 1. FastTravel Controller laden (für den Weg zum Kreis)
+-- 1. FastTravel laden
 local FastTravel = nil
 local scripts = LocalPlayer.PlayerScripts
 for _, mod in pairs(scripts:GetDescendants()) do
@@ -22,9 +23,8 @@ for _, mod in pairs(scripts:GetDescendants()) do
     end
 end
 
--- 2. Knit Teleport Funktion finden (Dynamisch)
+-- 2. Knit Teleport Funktion finden
 local function GetTeleportFunction()
-    -- Wir suchen im Packages/_Index Ordner nach irgendwas mit "acecateer_knit"
     local packages = ReplicatedStorage:FindFirstChild("Packages")
     if not packages then return nil end
     local index = packages:FindFirstChild("_Index")
@@ -32,7 +32,6 @@ local function GetTeleportFunction()
 
     for _, child in pairs(index:GetChildren()) do
         if string.find(child.Name, "acecateer_knit") then
-            -- Pfad: knit -> Services -> PlaceTeleportService -> RF -> Teleport
             local services = child:FindFirstChild("knit") and child.knit:FindFirstChild("Services")
             local teleportService = services and services:FindFirstChild("PlaceTeleportService")
             local rf = teleportService and teleportService:FindFirstChild("RF")
@@ -44,16 +43,15 @@ local function GetTeleportFunction()
     return nil
 end
 
--- === UI ===
 MainTab:CreateInput({
-    Name = "Map Name (Intern)",
-    PlaceholderText = "z.B. ConchStreet",
+    Name = "Map Name",
+    PlaceholderText = "ConchStreet",
     RemoveTextAfterFocusLost = false,
     Callback = function(text) targetMap = text end,
 })
 
 MainTab:CreateButton({
-    Name = "START KOMPLETT (Queue -> Confirm -> Teleport)",
+    Name = "AUTO JOIN & FORCE START",
     Callback = function()
         if not FastTravel then 
             Rayfield:Notify({Title="Fehler", Content="FastTravel fehlt!"})
@@ -62,22 +60,20 @@ MainTab:CreateButton({
 
         local teleportFunc = GetTeleportFunction()
         if not teleportFunc then
-            Rayfield:Notify({Title="Fehler", Content="Knit Teleport Service nicht gefunden!"})
+            Rayfield:Notify({Title="Fehler", Content="Knit Teleport nicht gefunden!"})
             return
         end
 
+        -- Remotes suchen
         local remoteFolder = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents", 5)
-        local createEvent = remoteFolder and remoteFolder:WaitForChild("Replica_ReplicaCreate", 5)
-        local signalEvent = remoteFolder and remoteFolder:WaitForChild("Replica_ReplicaSignal", 5)
+        local createEvent = remoteFolder:WaitForChild("Replica_ReplicaCreate", 5)
+        local signalEvent = remoteFolder:WaitForChild("Replica_ReplicaSignal", 5)
 
-        if not createEvent or not signalEvent then
-            Rayfield:Notify({Title="Fehler", Content="Replica Events fehlen!"})
-            return
-        end
+        if not createEvent or not signalEvent then return end
 
-        Rayfield:Notify({Title="Schritt 1", Content="Suche freien Platz..."})
+        Rayfield:Notify({Title="Status", Content="Suche freien Platz..."})
 
-        -- 1. ID Listener starten
+        -- A) ID Listener
         local capturedID = nil
         local connection = nil
         connection = createEvent.OnClientEvent:Connect(function(...)
@@ -88,63 +84,72 @@ MainTab:CreateButton({
             end
         end)
 
-        -- 2. Zum Kreis laufen
+        -- B) Teleportieren
         task.spawn(function()
             FastTravel:_attemptTeleportToEmptyQueue()
         end)
 
-        -- 3. Warten auf ID
+        -- C) Warten auf ID
         local start = tick()
         while not capturedID and (tick() - start < 10) do task.wait(0.1) end
         if connection then connection:Disconnect() end
 
         if capturedID then
-            Rayfield:Notify({Title="Schritt 2", Content="Lobby ID: " .. capturedID})
+            Rayfield:Notify({Title="Lobby Gefunden", Content="ID: " .. capturedID})
             print("Lobby ID:", capturedID)
             
             task.wait(0.5)
 
-            -- 4. Map Bestätigen (ConfirmMap via Replica)
+            -- D) KONFIGURATION SENDEN (ConfirmMap)
             local confirmArgs = {
                 [1] = capturedID,
                 [2] = "ConfirmMap",
                 [3] = {
                     ["Difficulty"] = targetDifficulty,
-                    ["Chapter"] = targetChapter,
+                    ["Chapter"] = 1,
                     ["Endless"] = targetEndless,
-                    ["World"] = targetMap
+                    ["World"] = targetMap,
+                    ["Mode"] = targetMode -- "Game"
                 }
             }
             signalEvent:FireServer(unpack(confirmArgs))
-            print("Map bestätigt via Replica.")
+            print("Map Config gesendet.")
             
-            task.wait(1.5) -- Wichtig: Kurz warten, bis der Server die Map gespeichert hat!
+            task.wait(0.5)
 
-            -- 5. FINALER TELEPORT (Knit PlaceTeleportService)
-            Rayfield:Notify({Title="Schritt 3", Content="Starte Match Teleport..."})
-            
+            -- E) START SIGNAL SENDEN (WICHTIG!)
+            -- Wir versuchen hier, den "Start"-Button zu drücken, damit die Lobby in den Start-Modus geht.
+            -- Wir probieren beide gängigen Varianten.
+            signalEvent:FireServer(capturedID, "RequestStart")
+            signalEvent:FireServer(capturedID, "Start")
+            print("Start-Request gesendet.")
+
+            task.wait(1.0) -- Kurz warten, bis der Server "Start" verarbeitet hat
+
+            -- F) FINALER TELEPORT (Knit)
+            -- Hier nutzen wir EXAKT die Argumente aus deinem Spy Log
             local teleportArgs = {
-                "Game",         -- Modus
-                targetMap,      -- Map Name
-                targetDifficulty,
-                targetEndless   -- false/true
+                targetMode,      -- "Game"
+                targetMap,       -- "ConchStreet"
+                targetDifficulty,-- 1
+                targetEndless    -- false
             }
             
-            -- Ausführen der Knit Funktion
+            Rayfield:Notify({Title="Finaler Schritt", Content="Sende Teleport Befehl..."})
+            
             local success, result = pcall(function()
                 return teleportFunc:InvokeServer(unpack(teleportArgs))
             end)
 
             if success then
-                print("Teleport Befehl gesendet. Ergebnis:", result)
-                Rayfield:Notify({Title="Erfolg", Content="Teleport wird eingeleitet!"})
+                print("Teleport Request Result:", result)
+                Rayfield:Notify({Title="Erfolg", Content="Teleport sollte starten!"})
             else
-                warn("Knit Teleport Error:", result)
-                Rayfield:Notify({Title="Fehler", Content="Teleport gescheitert (siehe Konsole)"})
+                warn("Teleport Error:", result)
             end
 
         else
-            Rayfield:Notify({Title="Timeout", Content="Keine Lobby gefunden."})
+            Rayfield:Notify({Title="Fehler", Content="Keine Lobby ID erhalten."})
         end
     end,
 })
