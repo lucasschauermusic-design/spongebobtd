@@ -9,7 +9,7 @@ local LocalPlayer = Players.LocalPlayer
 -- AKTUELLE AUSWAHL
 local selectedMap = "ConchStreet"
 local selectedChapter = 1
-local selectedDifficulty = 1 -- Standard: Normal
+local selectedDifficulty = 1
 
 local mapList = {
     "ChumBucket", 
@@ -30,7 +30,7 @@ for _, mod in pairs(LocalPlayer.PlayerScripts:GetDescendants()) do
     end
 end
 
--- Suchfunktion für Remotes
+-- Suchfunktion
 local function DeepFind(name, className)
     for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
         if desc.Name == name and (not className or desc:IsA(className)) then
@@ -56,18 +56,12 @@ MainTab:CreateDropdown({
     Callback = function(Option) selectedChapter = tonumber(Option) end,
 })
 
--- Difficulty basierend auf deinen Logs: Normal = 1, Hard = 2
 MainTab:CreateDropdown({
     Name = "Schwierigkeit",
     Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
     CurrentOption = "Normal",
     Callback = function(Option)
-        local diffs = {
-            ["Normal"] = 1, 
-            ["Hard"] = 2, 
-            ["Nightmare"] = 3, 
-            ["DavyJones"] = 4
-        }
+        local diffs = {["Normal"] = 1, ["Hard"] = 2, ["Nightmare"] = 3, ["DavyJones"] = 4}
         selectedDifficulty = diffs[Option] or 1
     end,
 })
@@ -75,7 +69,7 @@ MainTab:CreateDropdown({
 MainTab:CreateSection("Aktion")
 
 MainTab:CreateButton({
-    Name = "🚀 FULL AUTO START",
+    Name = "🚀 FULL AUTO START (Aggressiv)",
     Callback = function()
         local signalEvent = DeepFind("Replica_ReplicaSignal", "RemoteEvent")
         local createEvent = DeepFind("Replica_ReplicaCreate", "RemoteEvent")
@@ -86,7 +80,6 @@ MainTab:CreateButton({
         end
 
         local currentLobbyID = nil
-        
         local connection
         connection = createEvent.OnClientEvent:Connect(function(...)
             local args = {...}
@@ -96,16 +89,20 @@ MainTab:CreateButton({
             end
         end)
 
+        -- 1. Teleport
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
 
+        -- 2. Warten auf ID
         local timeout = tick()
         while not currentLobbyID and (tick() - timeout < 10) do task.wait(0.1) end
         
         if currentLobbyID then
-            Rayfield:Notify({Title="ID Gefunden", Content="Lobby: " .. tostring(currentLobbyID)})
-            task.wait(1.2) -- Zeit für Server-Sync
+            Rayfield:Notify({Title="Lobby Gefunden", Content="ID: " .. tostring(currentLobbyID) .. " - Erstelle Map..."})
             
-            -- EXAKTE REPLIKATION DEINER LOGS:
+            -- Kurze Pause damit die Lobby am Server "existiert"
+            task.wait(1.5) 
+            
+            -- EXAKTE REPLIKATION DEINER LOGS
             local packet = {
                 [1] = currentLobbyID,
                 [2] = "ConfirmMap",
@@ -117,18 +114,25 @@ MainTab:CreateButton({
                 }
             }
             
-            -- Senden mit table.unpack für exakte Struktur
-            signalEvent:FireServer(table.unpack(packet))
+            -- WICHTIG: Wir senden das Signal 3-mal kurz hintereinander, 
+            -- falls der Server den ersten Versuch ignoriert.
+            for i = 1, 3 do
+                signalEvent:FireServer(table.unpack(packet))
+                task.wait(0.3)
+            end
             
-            task.wait(0.8)
+            task.wait(1.0)
             
-            -- Finaler Start-Befehl (aus dem ersten Screenshot)
+            -- FINALER START (Dein Screenshot-Fix)
+            -- Wir senden es ebenfalls 2x zur Sicherheit
+            signalEvent:FireServer(currentLobbyID, "StartGame")
+            task.wait(0.2)
             signalEvent:FireServer(currentLobbyID, "StartGame")
             
-            Rayfield:Notify({Title="Erfolg", Content="Map erstellt & Start gefeuert!"})
+            Rayfield:Notify({Title="Vorgang beendet", Content="Signale gesendet!"})
         else
             if connection then connection:Disconnect() end
-            Rayfield:Notify({Title="Fehler", Content="Lobby ID nicht erhalten."})
+            Rayfield:Notify({Title="Fehler", Content="Lobby ID Zeitüberschreitung."})
         end
     end,
 })
