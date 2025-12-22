@@ -1,17 +1,15 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "DEBUG MODUS", LoadingTitle = "Lade..."})
-local MainTab = Window:CreateTab("Debug", 4483362458)
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Code Knacker", LoadingTitle = "Lade..."})
+local MainTab = Window:CreateTab("Fernbedienung", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- DEBUG LOGGER
-local function Log(msg)
-    print("[DEBUG] " .. msg)
-    -- Optional: Auch als Notify anzeigen
-    -- Rayfield:Notify({Title="Debug", Content=msg})
-end
+-- SETTINGS
+local targetMap = "ConchStreet"
+local targetDifficulty = 1 
+local targetMode = "Game" 
 
 -- 1. FastTravel
 local FastTravel = nil
@@ -23,148 +21,129 @@ for _, mod in pairs(scripts:GetDescendants()) do
     end
 end
 
--- 2. Signal Sucher mit Print-Ausgabe
-local function FindSignalDebug()
-    Log("Suche ReplicaRemoteSignal...")
-    
-    -- Schritt 1: Standard Ordner prüfen
-    local folder = ReplicatedStorage:FindFirstChild("ReplicaRemoteEvents")
-    if folder then
-        Log("Ordner 'ReplicaRemoteEvents' gefunden.")
-        local sig = folder:FindFirstChild("Replica_ReplicaSignal")
-        if sig then
-            Log(">>> SIGNAL GEFUNDEN (Standard): " .. sig:GetFullName())
-            return sig
-        else
-            Log("Signal NICHT im Standard-Ordner.")
-            Log("Inhalt des Ordners:")
-            for _, c in pairs(folder:GetChildren()) do
-                print(" - " .. c.Name .. " (" .. c.ClassName .. ")")
-            end
-        end
-    else
-        Log("Ordner 'ReplicaRemoteEvents' NICHT gefunden!")
-    end
-
-    -- Schritt 2: Deep Search
-    Log("Starte Deep Search im gesamten ReplicatedStorage...")
+-- 2. Signal Finder (Deep Search)
+local function FindReplicaSignal()
     for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
-        if desc.Name == "Replica_ReplicaSignal" then
-            Log(">>> SIGNAL GEFUNDEN (Deep Search): " .. desc:GetFullName())
-            return desc
-        end
+        if desc.Name == "Replica_ReplicaSignal" then return desc end
     end
-    
-    Log("!!! CRITICAL: Signal nirgendwo gefunden !!!")
     return nil
 end
 
+local function FindCreateEvent()
+    for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
+        if desc.Name == "Replica_ReplicaCreate" then return desc end
+    end
+    return nil
+end
+
+-- Globale Variable für die ID
+_G.LobbyID = nil
+_G.Signal = nil
+
 MainTab:CreateButton({
-    Name = "DEBUG START (Nur Setup - Kein TP)",
+    Name = "1. AUTO JOIN & MAP SETUP",
     Callback = function()
-        print("\n\n=== START DEBUG LAUF ===")
+        if not FastTravel then Rayfield:Notify({Title="Fehler", Content="FastTravel fehlt"}) return end
         
-        -- A) FastTravel Check
-        if not FastTravel then 
-            Log("FEHLER: FastTravel Module fehlt!") 
-            return 
-        else
-            Log("FastTravel Module geladen.")
-        end
-
-        -- B) Signal Suchen
-        local signalEvent = FindSignalDebug()
-        if not signalEvent then
-            Rayfield:Notify({Title="FEHLER", Content="Siehe F9 Konsole!"})
-            return
-        end
-
-        -- C) ID Event suchen (meistens im gleichen Ordner)
-        local createEvent = nil
-        if signalEvent.Parent then
-            createEvent = signalEvent.Parent:FindFirstChild("Replica_ReplicaCreate")
-        end
+        local signalEvent = FindReplicaSignal()
+        local createEvent = FindCreateEvent()
         
-        if not createEvent then
-            Log("Warnung: ReplicaCreate nicht neben Signal gefunden. Suche global...")
-            for _, d in pairs(ReplicatedStorage:GetDescendants()) do
-                if d.Name == "Replica_ReplicaCreate" then 
-                    createEvent = d 
-                    Log("Create Event gefunden bei: " .. d:GetFullName())
-                    break 
-                end
+        if not signalEvent or not createEvent then 
+             Rayfield:Notify({Title="Fehler", Content="Signale nicht gefunden"})
+             return 
+        end
+        _G.Signal = signalEvent
+
+        -- A) ID Abfangen
+        local connection
+        connection = createEvent.OnClientEvent:Connect(function(...)
+            local args = {...}
+            if args[1] and type(args[1]) == "number" then
+                _G.LobbyID = args[1]
+                connection:Disconnect()
             end
-        end
-
-        -- D) Listener Setup
-        local capturedID = nil
-        local connection = nil
-        if createEvent then
-            Log("Listener aktiviert. Warte auf Event...")
-            connection = createEvent.OnClientEvent:Connect(function(...)
-                local args = {...}
-                Log("Event empfangen! Args: " .. tostring(args[1]))
-                if args[1] and type(args[1]) == "number" then
-                    capturedID = args[1]
-                    Log("ID gespeichert: " .. capturedID)
-                    connection:Disconnect()
-                end
-            end)
-        else
-            Log("FEHLER: CreateEvent fehlt, kann ID nicht abfangen.")
-            return
-        end
-
-        -- E) Teleport zum Kreis (AutoJoin)
-        Log("Führe AutoJoin aus...")
-        task.spawn(function()
-            FastTravel:_attemptTeleportToEmptyQueue()
         end)
 
-        -- F) Warten auf ID
+        -- B) Teleport
+        task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
+
+        -- C) Warten
+        Rayfield:Notify({Title="Warte...", Content="Suche ID..."})
         local start = tick()
-        while not capturedID and (tick() - start < 10) do task.wait(0.1) end
-        if connection then connection:Disconnect() end
-
-        if capturedID then
-            Rayfield:Notify({Title="ID Gefunden", Content=tostring(capturedID)})
-            Log("--- LOBBY SETUP BEGINNT ---")
-            task.wait(1.0)
-
-            -- G) ConfirmMap senden
-            -- Wir nutzen exakt deine Werte
+        while not _G.LobbyID and (tick() - start < 10) do task.wait(0.1) end
+        
+        if _G.LobbyID then
+            Rayfield:Notify({Title="Gefunden!", Content="Lobby ID: " .. _G.LobbyID})
+            task.wait(0.5)
+            
+            -- Map Confirmen
             local confirmArgs = {
-                [1] = capturedID,
+                [1] = _G.LobbyID,
                 [2] = "ConfirmMap",
                 [3] = {
-                    ["Difficulty"] = 1,
+                    ["Difficulty"] = targetDifficulty,
                     ["Chapter"] = 1,
                     ["Endless"] = false,
-                    ["World"] = "ConchStreet",
-                    ["Mode"] = "Game" 
+                    ["World"] = targetMap,
+                    ["Mode"] = targetMode 
                 }
             }
-            
-            Log("Sende 'ConfirmMap'...")
-            pcall(function() 
-                signalEvent:FireServer(unpack(confirmArgs)) 
-            end)
-            Log("ConfirmMap gesendet. (Schau auf das Lobby-Schild!)")
-            
-            task.wait(2.0) -- Zeit zum Beobachten
-
-            -- H) RequestStart senden
-            Log("Sende 'RequestStart' & 'Start'...")
-            pcall(function() signalEvent:FireServer(capturedID, "RequestStart") end)
-            pcall(function() signalEvent:FireServer(capturedID, "Start") end)
-            
-            Rayfield:Notify({Title="Fertig", Content="Signale gesendet. KEIN Teleport."})
-            Log("--- DEBUG ENDE ---")
-            Log("Bitte prüfen: Startet der Countdown? Zeigt das Schild die Map?")
-
+            signalEvent:FireServer(unpack(confirmArgs))
+            Rayfield:Notify({Title="Bereit", Content="Jetzt die unteren Buttons testen!"})
         else
-            Log("TIMEOUT: Keine ID empfangen. Bist du auf dem Kreis gelandet?")
-            Rayfield:Notify({Title="Fehler", Content="Keine ID (Timeout)"})
+            Rayfield:Notify({Title="Fehler", Content="Keine ID gefunden."})
+        end
+    end,
+})
+
+MainTab:CreateSection("TEST BUTTONS (Wenn Timer läuft)")
+
+MainTab:CreateButton({
+    Name = "Test A: 'Start' (Standard)",
+    Callback = function()
+        if _G.Signal and _G.LobbyID then
+            _G.Signal:FireServer(_G.LobbyID, "Start")
+            print("Gesendet: Start")
+        end
+    end,
+})
+
+MainTab:CreateButton({
+    Name = "Test B: 'RequestStart'",
+    Callback = function()
+        if _G.Signal and _G.LobbyID then
+            _G.Signal:FireServer(_G.LobbyID, "RequestStart")
+            print("Gesendet: RequestStart")
+        end
+    end,
+})
+
+MainTab:CreateButton({
+    Name = "Test C: 'ForceStart'",
+    Callback = function()
+        if _G.Signal and _G.LobbyID then
+            _G.Signal:FireServer(_G.LobbyID, "ForceStart")
+            print("Gesendet: ForceStart")
+        end
+    end,
+})
+
+MainTab:CreateButton({
+    Name = "Test D: 'VoteStart'",
+    Callback = function()
+        if _G.Signal and _G.LobbyID then
+            _G.Signal:FireServer(_G.LobbyID, "VoteStart")
+            print("Gesendet: VoteStart")
+        end
+    end,
+})
+
+MainTab:CreateButton({
+    Name = "Test E: 'Ready'",
+    Callback = function()
+        if _G.Signal and _G.LobbyID then
+            _G.Signal:FireServer(_G.LobbyID, "Ready")
+            print("Gesendet: Ready")
         end
     end,
 })
