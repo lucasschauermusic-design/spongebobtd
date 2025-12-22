@@ -30,7 +30,7 @@ for _, mod in pairs(LocalPlayer.PlayerScripts:GetDescendants()) do
     end
 end
 
--- Suchfunktion
+-- Suchfunktion für Remotes
 local function DeepFind(name, className)
     for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
         if desc.Name == name and (not className or desc:IsA(className)) then
@@ -69,7 +69,7 @@ MainTab:CreateDropdown({
 MainTab:CreateSection("Aktion")
 
 MainTab:CreateButton({
-    Name = "🚀 FULL AUTO START (Aggressiv)",
+    Name = "🚀 FULL AUTO START",
     Callback = function()
         local signalEvent = DeepFind("Replica_ReplicaSignal", "RemoteEvent")
         local createEvent = DeepFind("Replica_ReplicaCreate", "RemoteEvent")
@@ -80,6 +80,8 @@ MainTab:CreateButton({
         end
 
         local currentLobbyID = nil
+        
+        -- Dynamisches Abfangen der Lobby-ID
         local connection
         connection = createEvent.OnClientEvent:Connect(function(...)
             local args = {...}
@@ -89,7 +91,7 @@ MainTab:CreateButton({
             end
         end)
 
-        -- 1. Teleport
+        -- 1. Teleport zur Queue
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
 
         -- 2. Warten auf ID
@@ -97,12 +99,11 @@ MainTab:CreateButton({
         while not currentLobbyID and (tick() - timeout < 10) do task.wait(0.1) end
         
         if currentLobbyID then
-            Rayfield:Notify({Title="Lobby Gefunden", Content="ID: " .. tostring(currentLobbyID) .. " - Erstelle Map..."})
+            Rayfield:Notify({Title="Lobby ID gefunden", Content="ID: " .. tostring(currentLobbyID)})
+            task.wait(1.2) -- Wartezeit für Serverstabilität
             
-            -- Kurze Pause damit die Lobby am Server "existiert"
-            task.wait(1.5) 
-            
-            -- EXAKTE REPLIKATION DEINER LOGS
+            -- EXAKTE REPLIKATION DEINER LOGS:
+            -- Wir nutzen table.unpack für die identische Struktur
             local packet = {
                 [1] = currentLobbyID,
                 [2] = "ConfirmMap",
@@ -114,25 +115,18 @@ MainTab:CreateButton({
                 }
             }
             
-            -- WICHTIG: Wir senden das Signal 3-mal kurz hintereinander, 
-            -- falls der Server den ersten Versuch ignoriert.
-            for i = 1, 3 do
-                signalEvent:FireServer(table.unpack(packet))
-                task.wait(0.3)
-            end
+            -- Signal senden
+            signalEvent:FireServer(table.unpack(packet))
             
-            task.wait(1.0)
+            task.wait(0.8)
             
-            -- FINALER START (Dein Screenshot-Fix)
-            -- Wir senden es ebenfalls 2x zur Sicherheit
-            signalEvent:FireServer(currentLobbyID, "StartGame")
-            task.wait(0.2)
+            -- 4. START SIGNAL (Screenshot-Fix)
             signalEvent:FireServer(currentLobbyID, "StartGame")
             
-            Rayfield:Notify({Title="Vorgang beendet", Content="Signale gesendet!"})
+            Rayfield:Notify({Title="Erfolg", Content="Map gewählt & Start gefeuert!"})
         else
             if connection then connection:Disconnect() end
-            Rayfield:Notify({Title="Fehler", Content="Lobby ID Zeitüberschreitung."})
+            Rayfield:Notify({Title="Fehler", Content="Timeout: Lobby ID nicht erhalten."})
         end
     end,
 })
