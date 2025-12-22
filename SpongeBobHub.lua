@@ -1,72 +1,68 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Queue Master", LoadingTitle = "Verbinde mit Screen..."})
-local Tab = Window:CreateTab("Lobby", 4483362458)
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Final Tools", LoadingTitle = "Scanning..."})
+local Tab = Window:CreateTab("Tools", 4483362458)
 
--- Wir suchen das QueueScreen Modul
-local QueueScreen = nil
-local scripts = game:GetService("Players").LocalPlayer.PlayerScripts
-for _, mod in pairs(scripts:GetDescendants()) do
-    if mod.Name == "QueueScreen" and mod:IsA("ModuleScript") then
-        local ok, res = pcall(require, mod)
-        if ok then QueueScreen = res end
-        break
-    end
-end
-
-if not QueueScreen then
-    Rayfield:Notify({Title="Fehler", Content="QueueScreen Modul nicht gefunden!"})
-end
-
--- AUTOMATISCHE AUSWAHL
+-- 1. REMOTE SCANNER (Die direkte Leitung)
 Tab:CreateButton({
-    Name = "Setup: Conch Street (Normal)",
+    Name = "Scanne nach RemoteEvents",
     Callback = function()
-        if QueueScreen then
-            print("--- SENDE SETUP BEFEHLE ---")
-            
-            -- Wir nutzen pcall, falls eine Funktion fehlschlägt
-            pcall(function() 
-                print("Wähle Welt...")
-                QueueScreen.SelectWorld("ConchStreet") 
-            end)
-            
-            task.wait(0.5) -- Kurze Pause für Sicherheit
-            
-            pcall(function() 
-                print("Wähle Kapitel...")
-                QueueScreen.SelectChapter(1) 
-            end)
-            
-            task.wait(0.5)
-            
-            pcall(function() 
-                print("Wähle Schwierigkeit...")
-                QueueScreen.SelectDifficulty("Normal") 
-            end)
-            
-            Rayfield:Notify({Title="Erledigt", Content="Setup gesendet!"})
-        else
-            Rayfield:Notify({Title="Fehler", Content="Modul nicht geladen"})
+        print("\n--- REMOTE EVENT SCAN ---")
+        -- Wir suchen überall in ReplicatedStorage nach Events
+        local rs = game:GetService("ReplicatedStorage")
+        local count = 0
+        
+        for _, obj in pairs(rs:GetDescendants()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                local n = obj.Name:lower()
+                -- Wir filtern nach interessanten Namen
+                if n:find("join") or n:find("queue") or n:find("start") or n:find("lobby") or n:find("ready") then
+                    warn("TREFFER: " .. obj.Name .. " (" .. obj.ClassName .. ")")
+                    print("Pfad: " .. obj:GetFullName())
+                    count = count + 1
+                end
+            end
         end
+        
+        if count == 0 then print("Keine offensichtlichen Remotes gefunden.") end
+        Rayfield:Notify({Title="Scan fertig", Content="Check F9 für Events!"})
     end,
 })
 
--- BEREIT BUTTON SUCHE
+-- 2. BUTTON CLICKER (Der physische Klick)
 Tab:CreateButton({
-    Name = "Finde 'BEREIT' Funktion",
+    Name = "Suche & Drücke 'BEREIT'",
     Callback = function()
-        print("\n--- SUCHE NACH READY/START ---")
-        if QueueScreen then
-            for key, val in pairs(QueueScreen) do
-                if type(val) == "function" then
-                    -- Wir suchen nach Namen, die den Start auslösen könnten
-                    print("Funktion: " .. key)
-                    if key:lower():find("ready") or key:lower():find("start") or key:lower():find("confirm") then
-                        warn("!!! TREFFER: " .. key .. " !!!")
+        print("\n--- BUTTON SUCHE ---")
+        local gui = game:GetService("Players").LocalPlayer.PlayerGui
+        local found = false
+        
+        for _, obj in pairs(gui:GetDescendants()) do
+            if obj:IsA("TextButton") or obj:IsA("ImageButton") then
+                -- Wir suchen nach dem Text "ICH BIN BEREIT!" oder dem Namen
+                if (obj:IsA("TextButton") and obj.Text:find("BEREIT")) or obj.Name:lower():find("ready") or obj.Name:lower():find("start") then
+                    if obj.Visible then -- Nur sichtbare Knöpfe drücken
+                        warn("KNOPF GEFUNDEN: " .. obj.Name)
+                        print("Text: " .. (obj.Text or "Kein Text"))
+                        print("Pfad: " .. obj:GetFullName())
+                        
+                        -- Versuche, ihn zu drücken
+                        print("Versuche Klick...")
+                        for _, conn in pairs(getconnections(obj.MouseButton1Click)) do
+                            conn:Fire()
+                        end
+                        for _, conn in pairs(getconnections(obj.Activated)) do
+                            conn:Fire()
+                        end
+                        found = true
                     end
                 end
             end
-            Rayfield:Notify({Title="Scan fertig", Content="Schau in F9 nach 'Ready'!"})
+        end
+        
+        if found then
+            Rayfield:Notify({Title="Gefunden!", Content="Habe versucht zu klicken!"})
+        else
+            Rayfield:Notify({Title="Nichts gefunden", Content="Knopf nicht im UI gefunden."})
         end
     end,
 })
