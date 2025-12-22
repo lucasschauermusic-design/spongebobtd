@@ -1,47 +1,38 @@
 MainTab:CreateButton({
-   Name = "Auswahl erzwingen (Chapter + World)",
+   Name = "Welt-Auswahl erzwingen (Touch-Mode)",
    Callback = function()
        local player = game.Players.LocalPlayer
        local screen = player.PlayerGui:FindFirstChild("QueueScreen")
        
        if screen then
            local success, err = pcall(function()
-               -- 1. Das Menü im System "freischalten"
-               screen:SetAttribute("Hidden", false)
-               
-               -- 2. Pfade definieren
-               local selection = screen.Main.SelectionScreen
-               local worlds = selection.Main.StageSelect.WorldSelect.Content.Stages
-               
-               -- 3. Zuerst sicherstellen, dass Chapter 1 aktiv ist (falls ein Button da ist)
-               -- Im Log stand 'Already selected chapter 1', wir triggern es zur Sicherheit
-               local ch1 = selection.Main:FindFirstChild("Chapter1", true) or selection:FindFirstChild("1", true)
-               if ch1 and ch1:IsA("GuiButton") then
-                   firesignal(ch1.MouseButton1Click)
-               end
-               
-               task.wait(0.1)
-
-               -- 4. Die Welt auswählen
+               local worlds = screen.Main.SelectionScreen.Main.StageSelect.WorldSelect.Content.Stages
                local targetBtn = worlds:FindFirstChild(selectedWorld)
+
                if targetBtn then
-                   -- Wir feuern alles ab, was das Spiel registrieren könnte
-                   firesignal(targetBtn.MouseButton1Down)
-                   firesignal(targetBtn.MouseButton1Click)
+                   -- Wir machen den Button für das System "aktiv"
+                   targetBtn.Visible = true
+                   
+                   -- Wir holen uns die exakte Bildschirmposition des Buttons
+                   local pos = targetBtn.AbsolutePosition
+                   local size = targetBtn.AbsoluteSize
+                   local centerX = pos.X + (size.X / 2)
+                   local centerY = pos.Y + (size.Y / 2)
+
+                   -- Wir simulieren eine Berührung (Touch) genau in der Mitte des Buttons
+                   local VirtualUser = game:GetService("VirtualUser")
+                   VirtualUser:SetKeyDown('0') -- Simuliert Aktivierung
+                   VirtualUser:Button1Down(Vector2.new(centerX, centerY))
+                   task.wait(0.05)
+                   VirtualUser:Button1Up(Vector2.new(centerX, centerY))
+                   
+                   -- Zusätzlicher Versuch über das interne Signal
                    firesignal(targetBtn.Activated)
                    
-                   -- Wir versuchen den Text-Wert direkt zu setzen, falls das Spiel darauf achtet
-                   if targetBtn:FindFirstChild("Title") then
-                       print("Sende Klick an: " .. targetBtn.Title.Text)
-                   end
+                   Rayfield:Notify({Title = "Status", Content = "Touch-Signal an " .. selectedWorld .. " gesendet!"})
                end
            end)
-           
-           if success then
-               Rayfield:Notify({Title = "Status", Content = "Sequenz für " .. selectedWorld .. " gesendet!"})
-           else
-               warn("Fehler: " .. tostring(err))
-           end
+           if not success then warn(err) end
        end
    end,
 })
