@@ -6,7 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- EINSTELLUNGEN
+-- EINSTELLUNGEN (Hier kannst du deine Map anpassen)
 local targetMap = "ConchStreet"
 local targetDifficulty = 1 
 local targetMode = "Game" 
@@ -20,7 +20,7 @@ for _, mod in pairs(LocalPlayer.PlayerScripts:GetDescendants()) do
     end
 end
 
--- Suchfunktion für Remotes
+-- Suchfunktion für die Remotes
 local function DeepFind(name, className)
     for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
         if desc.Name == name and (not className or desc:IsA(className)) then
@@ -31,20 +31,20 @@ local function DeepFind(name, className)
 end
 
 MainTab:CreateButton({
-    Name = "🚀 FULL AUTO: JOIN & START",
+    Name = "🚀 FULL AUTO: JOIN, SELECT MAP & START",
     Callback = function()
-        -- 1. Events finden
+        -- 1. Events suchen
         local signalEvent = DeepFind("Replica_ReplicaSignal", "RemoteEvent")
         local createEvent = DeepFind("Replica_ReplicaCreate", "RemoteEvent")
         
         if not signalEvent or not createEvent or not FastTravel then 
-             Rayfield:Notify({Title="Fehler", Content="Module oder Events nicht gefunden!"})
+             Rayfield:Notify({Title="Fehler", Content="Events/Module nicht gefunden!"})
              return 
         end
 
         local currentLobbyID = nil
         
-        -- 2. Listener für die Lobby ID starten
+        -- 2. Listener für Lobby ID (Wichtig für die Map-Wahl)
         local connection
         connection = createEvent.OnClientEvent:Connect(function(...)
             local args = {...}
@@ -55,18 +55,18 @@ MainTab:CreateButton({
         end)
 
         -- 3. Teleport zur Queue
-        Rayfield:Notify({Title="Status", Content="Teleportiere zur Queue..."})
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
 
-        -- 4. Warten bis ID da ist (max 10 Sek)
+        -- 4. Warten auf die ID vom Server
         local start = tick()
         while not currentLobbyID and (tick() - start < 10) do task.wait(0.1) end
         
         if currentLobbyID then
             Rayfield:Notify({Title="ID Gefunden", Content="Lobby: " .. tostring(currentLobbyID)})
-            task.wait(0.3)
+            task.wait(0.5)
             
-            -- 5. Map bestätigen (ConfirmMap)
+            -- 5. MAP AUSWÄHLEN (ConfirmMap)
+            -- Hier werden deine oben eingestellten Werte (ConchStreet, etc.) gesendet
             local confirmArgs = {
                 [1] = currentLobbyID,
                 [2] = "ConfirmMap",
@@ -79,19 +79,17 @@ MainTab:CreateButton({
                 }
             }
             signalEvent:FireServer(unpack(confirmArgs))
+            print("Map Auswahl gesendet für ID: " .. tostring(currentLobbyID))
             
-            task.wait(0.2) -- Kurze Pause für den Server
+            task.wait(0.3) -- Kurze Pause, damit der Server die Map-Wahl verarbeitet
             
-            -- 6. FORCE START (Das Signal aus deinem Screenshot)
+            -- 6. START SIGNAL (Das Signal aus deinem Screenshot)
             signalEvent:FireServer(currentLobbyID, "StartGame")
             
-            Rayfield:Notify({Title="Erfolg", Content="Start-Signal gesendet!"})
+            Rayfield:Notify({Title="Fertig", Content="Map gewählt & Start gefeuert!"})
         else
             if connection then connection:Disconnect() end
-            Rayfield:Notify({Title="Timeout", Content="Keine Lobby ID erhalten."})
+            Rayfield:Notify({Title="Fehler", Content="Keine Lobby ID erhalten (Timeout)"})
         end
     end,
 })
-
-MainTab:CreateSection("Info")
-MainTab:CreateLabel("Script wartet nach Klick automatisch auf ID")
