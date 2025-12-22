@@ -11,6 +11,7 @@ local selectedMap = "ConchStreet"
 local selectedChapter = 1
 local selectedDifficulty = 1
 
+-- Maps aus deinen Screenshots
 local mapList = {
     "ChumBucket", 
     "ConchStreet", 
@@ -46,6 +47,7 @@ MainTab:CreateDropdown({
     Callback = function(Option) selectedChapter = tonumber(Option) end,
 })
 
+-- Schwierigkeiten aus deinem Screenshot
 MainTab:CreateDropdown({
     Name = "Schwierigkeit",
     Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
@@ -69,19 +71,19 @@ MainTab:CreateButton({
             return 
         end
 
-        -- 1. ZUERST DEN LISTENER STARTEN (Wichtig!)
+        -- LISTENER STARTEN
         local connection
         connection = createEvent.OnClientEvent:Connect(function(lobbyID)
             if type(lobbyID) == "number" then
-                connection:Disconnect() -- Verbindung trennen, sobald ID da ist
+                connection:Disconnect() 
                 
-                print("Lobby ID live abgefangen: " .. lobbyID)
+                -- Fix für den Concatenation-Fehler
                 Rayfield:Notify({Title="ID Abgefangen", Content="Lobby ID: " .. tostring(lobbyID)})
                 
-                -- 2. WARTEN (Wie im erfolgreichen Snippet)
+                -- Warten für Server-Sync (wie im erfolgreichen Test)
                 task.wait(2.0)
                 
-                -- 3. MAP-DATEN SENDEN
+                -- MAP-DATEN SENDEN
                 local packet = {
                     [1] = lobbyID,
                     [2] = "ConfirmMap",
@@ -94,17 +96,14 @@ MainTab:CreateButton({
                 }
                 
                 signalEvent:FireServer(table.unpack(packet))
-                warn(">>> MAP-SIGNAL GESENDET: " .. selectedMap .. " <<<")
                 
-                -- 4. AUTOMATISCH STARTEN (Mit Verzögerung)
+                -- Start-Befehl nach Map-Erstellung
                 task.wait(1.5)
                 signalEvent:FireServer(lobbyID, "StartGame")
-                warn(">>> START-BEFEHL GEFEUERT <<<")
             end
         end)
 
-        -- 5. ERST JETZT DEN TELEPORT AUSLÖSEN
-        Rayfield:Notify({Title="Status", Content="Suche Lobby..."})
+        -- Teleport auslösen
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
     end,
 })
