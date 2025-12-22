@@ -6,9 +6,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- Einstellungen (Standardwerte basierend auf deinem Snippet)
+-- Einstellungen
 local targetMap = "ConchStreet" 
-local targetDifficulty = 1  -- 1 scheint "Easy" oder "Normal" zu sein? (Zahl statt Text!)
+local targetDifficulty = 1 
 local targetChapter = 1
 local targetEndless = false
 
@@ -22,42 +22,42 @@ for _, mod in pairs(scripts:GetDescendants()) do
     end
 end
 
--- UI
 MainTab:CreateInput({
-    Name = "Map (Interner Name)",
+    Name = "Map Name (Intern)",
     PlaceholderText = "z.B. ConchStreet",
     RemoveTextAfterFocusLost = false,
-    Callback = function(text)
-        targetMap = text
-    end,
+    Callback = function(text) targetMap = text end,
 })
 
 MainTab:CreateButton({
-    Name = "AUTO JOIN & CONFIG & START",
+    Name = "AUTO JOIN & START (Fixed Path)",
     Callback = function()
         if not FastTravel then 
-            Rayfield:Notify({Title="Fehler", Content="FastTravel nicht geladen!"})
+            Rayfield:Notify({Title="Fehler", Content="FastTravel fehlt!"})
             return 
         end
 
-        -- A) Wir suchen die nötigen Remotes VORHER
-        local eventFolder = ReplicatedStorage:FindFirstChild("ReplicaRemoteEvents")
-        if not eventFolder then
-            Rayfield:Notify({Title="Fehler", Content="Ordner 'ReplicaRemoteEvents' nicht gefunden!"})
+        -- == WICHTIG: PFADE KORRIGIERT ==
+        -- Wir definieren den Ordner exakt, damit er ihn garantiert findet
+        local remoteFolder = ReplicatedStorage:FindFirstChild("ReplicaRemoteEvents")
+        if not remoteFolder then
+            Rayfield:Notify({Title="Fehler", Content="Ordner 'ReplicaRemoteEvents' fehlt!"})
             return
         end
 
-        local createEvent = eventFolder:FindFirstChild("Replica_ReplicaCreate")
-        local signalEvent = eventFolder:FindFirstChild("Replica_ReplicaSignal") -- Das aus deinem Snippet
+        local createEvent = remoteFolder:FindFirstChild("Replica_ReplicaCreate")
+        -- HIER lag der Fehler: Wir suchen es jetzt direkt im Ordner
+        local signalEvent = remoteFolder:FindFirstChild("Replica_ReplicaSignal") 
 
         if not createEvent or not signalEvent then
-            Rayfield:Notify({Title="Fehler", Content="Remotes nicht gefunden!"})
+            Rayfield:Notify({Title="Fehler", Content="Remote Events nicht gefunden!"})
+            print("Create:", createEvent, "Signal:", signalEvent)
             return
         end
 
-        Rayfield:Notify({Title="Status", Content="Teleport gestartet - Warte auf ID..."})
+        Rayfield:Notify({Title="Status", Content="Warte auf Teleport..."})
 
-        -- B) ID Abfangen (Listener)
+        -- 1. Listener aufbauen (Die Falle)
         local capturedID = nil
         local connection = nil
 
@@ -66,65 +66,62 @@ MainTab:CreateButton({
             local id = args[1]
             if id and type(id) == "number" then
                 capturedID = id
-                connection:Disconnect() 
+                connection:Disconnect() -- Sofort trennen, wir haben die ID
             end
         end)
 
-        -- C) Teleport ausführen
+        -- 2. Teleportieren
         task.spawn(function()
             FastTravel:_attemptTeleportToEmptyQueue()
         end)
 
-        -- D) Warten auf ID
+        -- 3. Warten auf ID (Max 8 Sekunden)
         local startTime = tick()
-        repeat 
-            task.wait(0.1)
-        until capturedID or (tick() - startTime > 8)
+        repeat task.wait(0.1) until capturedID or (tick() - startTime > 8)
         
         if connection then connection:Disconnect() end
 
-        -- E) ABLAUF STARTEN
+        -- 4. Aktion ausführen
         if capturedID then
-            Rayfield:Notify({Title="ID Gefunden", Content="Lobby: " .. capturedID})
+            Rayfield:Notify({Title="Erfolg", Content="Lobby ID: " .. capturedID})
+            print("Gefundene ID:", capturedID)
             
-            task.wait(0.5) -- Kurze Pause zur Sicherheit
+            task.wait(0.5) 
 
-            -- 1. MAP BESTÄTIGEN (Dein Snippet Code)
+            -- MAP BESTÄTIGEN
+            -- Wir nutzen exakt die Struktur aus deinem Snippet
             local args = {
                 [1] = capturedID,
-                [2] = "ConfirmMap", -- WICHTIG: Das fehlte vorher!
+                [2] = "ConfirmMap",
                 [3] = {
                     ["Difficulty"] = targetDifficulty,
                     ["Chapter"] = targetChapter,
                     ["Endless"] = targetEndless,
-                    ["World"] = targetMap, -- Hier setzen wir deinen Map-Namen ein
+                    ["World"] = targetMap, 
                 },
             }
             
-            -- Senden
             signalEvent:FireServer(unpack(args))
-            print("ConfirmMap gesendet für ID: " .. capturedID)
-            Rayfield:Notify({Title="Config", Content="Map '"..targetMap.."' bestätigt."})
+            Rayfield:Notify({Title="Config", Content="Map bestätigt!"})
+            print("ConfirmMap gesendet.")
 
-            task.wait(0.8) -- Dem Server kurz Zeit geben, die Map zu speichern
+            task.wait(1.0) -- Wichtig: Kurz warten, damit der Server speichert
 
-            -- 2. SPIEL STARTEN (Invoker)
-            -- Jetzt wo die Map "Confirmed" ist, sollte der Start funktionieren.
+            -- SPIEL STARTEN
+            -- Wir suchen den Invoker (meistens direkt in ReplicatedStorage, nicht im Ordner)
             local invoker = ReplicatedStorage:FindFirstChild("MatchStartInvoker", true)
             
             if invoker then
                 invoker:InvokeServer(capturedID)
-                Rayfield:Notify({Title="Start", Content="Teleport ins Match..."})
+                Rayfield:Notify({Title="Gestartet", Content="Teleport ins Match..."})
             else
-                -- Fallback: Manchmal muss man auch ein Signal zum Starten senden?
-                -- Probieren wir "RequestStart" falls Invoker fehlt (nur Vermutung)
-                -- signalEvent:FireServer(capturedID, "RequestStart")
-                warn("MatchStartInvoker nicht gefunden!")
-                Rayfield:Notify({Title="Warnung", Content="Konnte Start-Invoker nicht finden."})
+                Rayfield:Notify({Title="Warnung", Content="MatchStartInvoker fehlt - versuche Fallback"})
+                -- Fallback: Manchmal geht Start auch über das Signal Event
+                signalEvent:FireServer(capturedID, "RequestStart") -- Nur ein Versuch
             end
 
         else
-            Rayfield:Notify({Title="Timeout", Content="Keine Lobby-ID erhalten."})
+            Rayfield:Notify({Title="Timeout", Content="Keine Lobby ID bekommen."})
         end
     end,
 })
