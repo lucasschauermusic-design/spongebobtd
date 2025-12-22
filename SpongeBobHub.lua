@@ -32,7 +32,6 @@ end
 
 MainTab:CreateSection("Konfiguration")
 
--- Map Dropdown
 MainTab:CreateDropdown({
     Name = "Wähle Map",
     Options = mapList,
@@ -40,7 +39,6 @@ MainTab:CreateDropdown({
     Callback = function(Option) selectedMap = Option end,
 })
 
--- Chapter Dropdown
 MainTab:CreateDropdown({
     Name = "Wähle Chapter",
     Options = {"1","2","3","4","5","6","7","8","9","10"},
@@ -48,7 +46,6 @@ MainTab:CreateDropdown({
     Callback = function(Option) selectedChapter = tonumber(Option) end,
 })
 
--- Difficulty Dropdown (Normal=1, Hard=2, Nightmare=3, DavyJones=4)
 MainTab:CreateDropdown({
     Name = "Schwierigkeit",
     Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
@@ -68,24 +65,23 @@ MainTab:CreateButton({
         local createEvent = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents"):WaitForChild("Replica_ReplicaCreate")
         
         if not FastTravel then 
-            Rayfield:Notify({Title="Fehler", Content="FastTravel-Modul nicht gefunden!"})
+            Rayfield:Notify({Title="Fehler", Content="FastTravel-Modul fehlt!"})
             return 
         end
 
-        Rayfield:Notify({Title="Status", Content="Warte auf Lobby-Erstellung... Gehe jetzt in eine Queue!"})
-
-        -- LIVE-LISTENER (Die Methode, die funktioniert hat)
+        -- 1. ZUERST DEN LISTENER STARTEN (Wichtig!)
         local connection
         connection = createEvent.OnClientEvent:Connect(function(lobbyID)
             if type(lobbyID) == "number" then
-                connection:Disconnect() -- Nur für diese eine Lobby ausführen
+                connection:Disconnect() -- Verbindung trennen, sobald ID da ist
                 
+                print("Lobby ID live abgefangen: " .. lobbyID)
                 Rayfield:Notify({Title="ID Abgefangen", Content="Lobby ID: " .. tostring(lobbyID)})
                 
-                -- Kurze Pause für Server-Sync (wie im Snippet)
+                -- 2. WARTEN (Wie im erfolgreichen Snippet)
                 task.wait(2.0)
                 
-                -- MAP-DATEN SENDEN (Exakt wie in deinen Logs)
+                -- 3. MAP-DATEN SENDEN
                 local packet = {
                     [1] = lobbyID,
                     [2] = "ConfirmMap",
@@ -98,15 +94,17 @@ MainTab:CreateButton({
                 }
                 
                 signalEvent:FireServer(table.unpack(packet))
-                Rayfield:Notify({Title="Erfolg", Content="Map-Signal für " .. selectedMap .. " gesendet!"})
+                warn(">>> MAP-SIGNAL GESENDET: " .. selectedMap .. " <<<")
                 
-                -- Optional: Sofort Starten nach der Wahl
-                task.wait(0.5)
+                -- 4. AUTOMATISCH STARTEN (Mit Verzögerung)
+                task.wait(1.5)
                 signalEvent:FireServer(lobbyID, "StartGame")
+                warn(">>> START-BEFEHL GEFEUERT <<<")
             end
         end)
 
-        -- Den Teleport automatisch starten
+        -- 5. ERST JETZT DEN TELEPORT AUSLÖSEN
+        Rayfield:Notify({Title="Status", Content="Suche Lobby..."})
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
     end,
 })
