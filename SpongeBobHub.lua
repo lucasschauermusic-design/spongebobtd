@@ -1,62 +1,66 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- Fenster-Erstellung
 local Window = Rayfield:CreateWindow({
-   Name = "SpongeBob TD: Knit Selector",
-   LoadingTitle = "Greife auf Knit-Controller zu...",
+   Name = "SpongeBob TD: Final Sequence",
+   LoadingTitle = "Synchronisiere Knit-Logik...",
 })
 
--- Sicherer Tab-Check gegen den Nil-Error
+-- Wir definieren das Tab sicher
 local MainTab = Window:CreateTab("Welten", 4483362458)
 local selectedWorld = "ChumBucket"
 
-MainTab:CreateDropdown({
-   Name = "Welt wählen",
-   Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
-   CurrentOption = {"ChumBucket"},
-   Callback = function(Option) selectedWorld = Option[1] end,
-})
+-- Sicherstellen, dass der Tab existiert, bevor wir Dropdowns hinzufügen
+if MainTab then
+    MainTab:CreateDropdown({
+       Name = "Welt wählen",
+       Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
+       CurrentOption = {"ChumBucket"},
+       Callback = function(Option) selectedWorld = Option[1] end,
+    })
 
-MainTab:CreateButton({
-   Name = "Welt-Auswahl erzwingen",
-   Callback = function()
-       local success, err = pcall(function()
-           -- Wir suchen den Knit-Service im Spiel
-           local Knit = game:GetService("ReplicatedStorage"):FindFirstChild("Knit", true)
-           if Knit then
-               local KnitClient = require(Knit.Parent.Knit) -- Knit laden
+    MainTab:CreateButton({
+       Name = "Welt-Auswahl erzwingen",
+       Callback = function()
+           local success, err = pcall(function()
+               -- Knit-Dienst suchen
+               local Knit = game:GetService("ReplicatedStorage"):FindFirstChild("Knit", true)
+               if not Knit then 
+                   Rayfield:Notify({Title = "Fehler", Content = "Knit Framework nicht gefunden!"})
+                   return 
+               end
                
-               -- Wir greifen die Controller aus deinem Screenshot ab
+               local KnitClient = require(Knit.Parent.Knit)
+               
+               -- Die Controller aus deinem Screenshot
                local worldCtrl = KnitClient.GetController("FactionWorldController")
                local uiCtrl = KnitClient.GetController("UIController")
 
-               -- Deine Reihenfolge: Erst Welt, dann Kapitel
-               if worldCtrl and worldCtrl.SelectWorld then
+               -- DEINE REIHENFOLGE: Zuerst World, dann Chapter
+               if worldCtrl then
+                   print("Schritt 1: Welt wird gesetzt...")
                    worldCtrl:SelectWorld(selectedWorld)
                end
                
-               task.wait(0.2)
+               task.wait(0.7) -- Etwas längere Pause für die Server-Synchronisation
                
-               if uiCtrl and uiCtrl.SelectChapter then
+               if uiCtrl then
+                   print("Schritt 2: Kapitel wird aktiviert...")
                    uiCtrl:SelectChapter(1)
                end
-               
-               Rayfield:Notify({Title = "Knit Erfolg", Content = selectedWorld .. " über Controller gesetzt!"})
-           else
-               -- Fallback: Suche in den PlayerScripts
-               for _, v in pairs(game.Players.LocalPlayer.PlayerScripts:GetDescendants()) do
-                   if v:IsA("ModuleScript") and v.Name:find("Controller") then
-                       local s = require(v)
-                       if type(s) == "table" then
-                           if s.SelectWorld then s:SelectWorld(selectedWorld) end
-                           task.wait(0.1)
-                           if s.SelectChapter then s:SelectChapter(1) end
-                       end
-                   end
+
+               -- ZUSATZ: Wir setzen das Attribut zur Sicherheit
+               local screen = game.Players.LocalPlayer.PlayerGui:FindFirstChild("QueueScreen")
+               if screen then
+                   screen:SetAttribute("Hidden", false)
                end
+               
+               Rayfield:Notify({Title = "Sequenz beendet", Content = "World -> Chapter erfolgreich!"})
+           end)
+           
+           if not success then 
+               warn("Kritischer Fehler: " .. tostring(err)) 
+               Rayfield:Notify({Title = "Fehler", Content = "Prüfe die Konsole (F9)"})
            end
-       end)
-       
-       if not success then warn("Knit-Fehler: " .. tostring(err)) end
-   end,
-})
+       end,
+    })
+end
