@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SpongeBob TD: Knit Master",
+   Name = "SpongeBob TD: Knit Scanner",
    LoadingTitle = "Analysiere Controller-Methoden...",
 })
 
@@ -19,41 +19,44 @@ if MainTab then
     MainTab:CreateButton({
        Name = "Welt-Auswahl erzwingen",
        Callback = function()
-           print("!!! START: Knit-Suche !!!")
+           print("!!! START: Knit-Methoden-Scan !!!")
            
            local success, err = pcall(function()
                local Knit = game:GetService("ReplicatedStorage"):FindFirstChild("Knit", true)
                local KnitClient = require(Knit.Parent.Knit)
                
-               -- Controller aus deinem Fund
                local worldCtrl = KnitClient.GetController("FactionWorldController")
                local uiCtrl = KnitClient.GetController("UIController")
 
-               -- SCHRITT 1: Die richtige Welt-Funktion finden
+               -- SCAN 1: FactionWorldController
                if worldCtrl then
-                   local foundMethod = nil
-                   -- Wir suchen nach Namen wie SelectWorld, SetWorld, JoinWorld
+                   print("--- Methoden in FactionWorldController: ---")
                    for name, func in pairs(worldCtrl) do
-                       if type(func) == "function" and (name:find("World") or name:find("Stage")) then
-                           print("Mögliche Methode gefunden: " .. name)
-                           foundMethod = name
+                       if type(func) == "function" then
+                           print("Gefunden: " .. name)
+                           -- Automatischer Versuch, wenn der Name passt
+                           if name:find("World") or name:find("Stage") or name:find("Select") then
+                               print("Versuche Aufruf: " .. name)
+                               pcall(function() worldCtrl[name](worldCtrl, selectedWorld) end)
+                           end
                        end
-                   end
-
-                   if foundMethod then
-                       print("Knit: Rufe " .. foundMethod .. " für " .. selectedWorld)
-                       worldCtrl[foundMethod](worldCtrl, selectedWorld)
-                   else
-                       print("Keine passende Welt-Methode im FactionWorldController gefunden!")
                    end
                end
 
                task.wait(0.5)
 
-               -- SCHRITT 2: Kapitel aktivieren (Name ist sicher aus deinem Log)
-               if uiCtrl and uiCtrl.SelectChapter then
-                   print("Knit: Aktiviere Kapitel 1")
-                   uiCtrl:SelectChapter(1)
+               -- SCAN 2: UIController (Hier liegt SelectChapter)
+               if uiCtrl then
+                   print("--- Methoden in UIController: ---")
+                   for name, func in pairs(uiCtrl) do
+                       if type(func) == "function" then
+                           print("Gefunden: " .. name)
+                           if name == "SelectChapter" then
+                               print("Knit: Aktiviere Kapitel 1 via UIController")
+                               uiCtrl:SelectChapter(1)
+                           end
+                       end
+                   end
                end
            end)
 
