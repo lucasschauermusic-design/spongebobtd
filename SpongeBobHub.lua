@@ -2,20 +2,25 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
    Name = "SpongeBob TD: Internal Selector",
-   LoadingTitle = "Synchronisiere mit Spiellogik...",
+   LoadingTitle = "Verbinde mit Spiellogik...",
 })
 
+-- Hier stellen wir sicher, dass das Tab korrekt erstellt wird
 local MainTab = Window:CreateTab("Welten", 4483362458)
+
 local selectedWorld = "ChumBucket"
 
+-- Dropdown zur Auswahl
 MainTab:CreateDropdown({
    Name = "Welt wählen",
    Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"},
    CurrentOption = {"ChumBucket"},
-   Callback = function(Option) selectedWorld = Option[1] end,
+   Callback = function(Option) 
+      selectedWorld = Option[1] 
+   end,
 })
 
--- Name exakt wie im Screenshot: "Welt-Auswahl erzwingen"
+-- Der Button nutzt die Namen aus deinem Screenshot
 MainTab:CreateButton({
    Name = "Welt-Auswahl erzwingen",
    Callback = function()
@@ -24,31 +29,36 @@ MainTab:CreateButton({
        
        if screen then
            local success, err = pcall(function()
-               -- 1. Internes Attribut setzen (aus deinem Log-Fund)
+               -- 1. Menü intern aktivieren
                screen:SetAttribute("Hidden", false)
                
                local selection = screen.Main.SelectionScreen
                local worlds = selection.Main.StageSelect.WorldSelect.Content.Stages
                
-               -- 2. Sicherstellen, dass Chapter 1 aktiv ist (Triggert SelectChapter())
+               -- 2. Kapitel 1 triggern (da dies laut Log oft Voraussetzung ist)
                local ch1 = selection.Main:FindFirstChild("Chapter1", true)
-               if ch1 and ch1:IsA("GuiButton") then
-                   firesignal(ch1.MouseButton1Click)
-                   task.wait(0.2) -- Wartezeit für das Spiel-Backend
+               if ch1 then
+                   for _, v in pairs(getconnections(ch1.MouseButton1Click)) do v:Fire() end
+                   task.wait(0.3)
                end
 
-               -- 3. Welt auswählen (Triggert SelectWorld())
+               -- 3. Welt auswählen
                local targetBtn = worlds:FindFirstChild(selectedWorld)
                if targetBtn then
-                   -- Wir feuern alle möglichen Signale ab
-                   firesignal(targetBtn.MouseButton1Click)
-                   firesignal(targetBtn.Activated)
+                   -- Wir feuern die Klicks direkt an die Spiellogik
+                   for _, v in pairs(getconnections(targetBtn.MouseButton1Click)) do
+                       v:Fire()
+                   end
                    
-                   Rayfield:Notify({Title = "Erfolg", Content = "Auswahl für " .. selectedWorld .. " gestartet!"})
+                   Rayfield:Notify({Title = "Erfolg", Content = "Befehl für " .. selectedWorld .. " gesendet!"})
+               else
+                   Rayfield:Notify({Title = "Fehler", Content = "Welt im Pfad nicht gefunden!"})
                end
            end)
            
            if not success then warn("Fehler: " .. tostring(err)) end
+       else
+           Rayfield:Notify({Title = "Hinweis", Content = "QueueScreen nicht gefunden!"})
        end
    end,
 })
