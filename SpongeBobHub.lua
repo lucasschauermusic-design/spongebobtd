@@ -1,19 +1,19 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Map Force", LoadingTitle = "Lade Fix..."})
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Listener-First", LoadingTitle = "Lade Fix..."})
 local MainTab = Window:CreateTab("Main", 4483362458)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+local replicaSignal = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents"):WaitForChild("Replica_ReplicaSignal")
+local replicaCreate = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents"):WaitForChild("Replica_ReplicaCreate")
 
 -- EINSTELLUNGEN
 local selectedMap = "ChumBucket"
 local selectedChapter = 1
 local selectedDifficulty = 1
 
--- FastTravel Modul finden
+-- FastTravel Modul
 local FastTravel = nil
-for _, mod in pairs(LocalPlayer.PlayerScripts:GetDescendants()) do
+for _, mod in pairs(game:GetService("Players").LocalPlayer.PlayerScripts:GetDescendants()) do
     if mod.Name == "FastTravelController" and mod:IsA("ModuleScript") then
         pcall(function() FastTravel = require(mod) end)
         break
@@ -38,20 +38,22 @@ MainTab:CreateDropdown({
 })
 
 MainTab:CreateButton({
-    Name = "🚀 FORCE START (MAP FIX)",
+    Name = "🚀 FULL AUTO (Listener First)",
     Callback = function()
-        local signalEvent = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents"):WaitForChild("Replica_ReplicaSignal")
-        local createEvent = ReplicatedStorage:WaitForChild("ReplicaRemoteEvents"):WaitForChild("Replica_ReplicaCreate")
-        
-        -- LISTENER ZUERST STARTEN
+        if not FastTravel then return end
+
+        -- 1. SCHRITT: LISTENER AKTIVIEREN
         local connection
-        connection = createEvent.OnClientEvent:Connect(function(lobbyID)
+        connection = replicaCreate.OnClientEvent:Connect(function(lobbyID)
             if type(lobbyID) == "number" then
-                connection:Disconnect() 
+                connection:Disconnect() -- Sofort stoppen, wenn ID da ist
                 
-                -- 1. Kurze Pause für Initialisierung
-                task.wait(1.5) 
+                print("Lobby-ID live abgefangen: " .. lobbyID)
                 
+                -- Warten wie im erfolgreichen Snippet
+                task.wait(2.0)
+                
+                -- 3. SCHRITT: MAP-DATEN SENDEN (Exakt dein Format)
                 local packet = {
                     [1] = lobbyID,
                     [2] = "ConfirmMap",
@@ -63,27 +65,20 @@ MainTab:CreateButton({
                     }
                 }
                 
-                -- 2. MAP AUSWAHL ERZWINGEN (3x senden zur Sicherheit)
-                -- Das stellt sicher, dass der Server die Wahl nicht wegen Timing-Fehlern ignoriert
-                for i = 1, 3 do
-                    signalEvent:FireServer(table.unpack(packet))
-                    task.wait(0.5)
-                end
+                replicaSignal:FireServer(table.unpack(packet))
                 
-                warn("Map-Daten mehrfach gesendet: " .. selectedMap)
-                
-                -- 3. Längere Pause vor dem Start
-                task.wait(2.0)
-                
-                -- 4. Spiel erst starten, wenn Map sicher gewählt wurde
-                signalEvent:FireServer(lobbyID, "StartGame")
-                Rayfield:Notify({Title="Erfolg", Content="Map erzwungen und gestartet!"})
+                -- 4. SCHRITT: STARTEN
+                task.wait(1.5)
+                replicaSignal:FireServer(lobbyID, "StartGame")
             end
         end)
 
-        -- TELEPORT
-        if FastTravel then
-            task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
-        end
+        -- 2. SCHRITT: TELEPORT ERST JETZT STARTEN
+        -- Wir nutzen task.defer, um sicherzustellen, dass der Listener im Hintergrund läuft
+        task.defer(function()
+            FastTravel:_attemptTeleportToEmptyQueue()
+        end)
+        
+        Rayfield:Notify({Title="Aktiviert", Content="Listener läuft, Teleport gestartet..."})
     end,
 })
