@@ -1,61 +1,57 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SpongeBob TD: Auto-Start Hub",
-   LoadingTitle = "Lade Spiel-Konfiguration...",
-   LoadingSubtitle = "by DeinName",
+   Name = "SpongeBob TD: UI-Automator",
+   LoadingTitle = "Lade Menü-Verknüpfungen...",
 })
 
-local MainTab = Window:CreateTab("Level Auswahl", 4483362458)
+local MainTab = Window:CreateTab("Auto-Select", 4483362458)
 
+-- Variablen für die Auswahl
 local selectedWorld = "ChumBucket"
 local selectedLevel = "1"
-local selectedDiff = "Normal"
+local selectedDiff = "Normal" -- Muss exakt wie in Dex heißen (z.B. DavyJones)
 
--- Welt Dropdown
+-- Dropdowns (hier die Listen einfügen, die wir aus Dex ausgelesen haben)
 MainTab:CreateDropdown({
-   Name = "Welt",
-   Options = {"ChumBucket", "ConchStreet", "JellyfishFields", "KrustyKrab", "SandysTreedome", "RockBottom", "KampKoral"},
-   CurrentOption = {"ChumBucket"},
-   Callback = function(Option) selectedWorld = Option[1] end,
-})
-
--- Level Dropdown
-MainTab:CreateDropdown({
-   Name = "Level",
-   Options = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"},
-   CurrentOption = {"1"},
-   Callback = function(Option) selectedLevel = Option[1] end,
-})
-
--- Schwierigkeit Dropdown
-MainTab:CreateDropdown({
-   Name = "Schwierigkeit",
-   Options = {"Normal", "Hard", "Nightmare", "Davy Jones"},
+   Name = "Wähle Schwierigkeit",
+   Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
    CurrentOption = {"Normal"},
-   Callback = function(Option) selectedDiff = Option[1] end,
+   Callback = function(Option)
+      selectedDiff = Option[1]
+   end,
 })
 
--- Start Funktion
+-- Der Button, der die Auswahl im Spiel-UI "anklickt"
 MainTab:CreateButton({
-   Name = "In Map-Zone teleportieren",
+   Name = "Auswahl im Spiel bestätigen",
    Callback = function()
-       local targetMap = selectedWorld .. "_" .. selectedLevel
-       print("Teleportiere zu: " .. targetMap .. " (" .. selectedDiff .. ")")
+       local player = game.Players.LocalPlayer
+       -- Wir nutzen den Pfad, den du in Dex gefunden hast
+       local screen = player.PlayerGui:FindFirstChild("QueueScreen")
        
-       -- Suchen der Teleport-Zone im Workspace
-       -- Hier nutzen wir den Pfad aus deinem Screenshot
-       local character = game.Players.LocalPlayer.Character
-       local lobbyArea = game.Workspace:FindFirstChild("Matchmakers", true)
-       
-       if character and character:FindFirstChild("HumanoidRootPart") then
-           -- Simpler Teleport-Befehl zur QueueArea
-           character.HumanoidRootPart.CFrame = CFrame.new(0, 50, 0) -- Platzhalter-Koordinaten
+       if screen then
+           local diffFolder = screen.Main.SelectionScreen.Info.Content.Difficulties
+           local targetBtn = diffFolder:FindFirstChild(selectedDiff)
            
+           if targetBtn and targetBtn:IsA("TextButton") then
+               -- Simulation des Klicks
+               -- Wir nutzen 'firesignal', was in Codex meist verfügbar ist
+               firesignal(targetBtn.MouseButton1Click)
+               
+               Rayfield:Notify({
+                  Title = "Erfolg",
+                  Content = selectedDiff .. " wurde im Menü ausgewählt!",
+                  Duration = 3
+               })
+           else
+               print("Button nicht gefunden: " .. selectedDiff)
+           end
+       else
            Rayfield:Notify({
-              Title = "Teleport",
-              Content = "Du wirst zur Zone bewegt. Bitte kurz warten!",
-              Duration = 3
+              Title = "Hinweis",
+              Content = "Bitte öffne zuerst das Map-Menü im Spiel!",
+              Duration = 5
            })
        end
    end,
