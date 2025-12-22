@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SpongeBob TD: Sequence Fix",
-   LoadingTitle = "Synchronisiere Reihenfolge...",
+   Name = "SpongeBob TD: Logic Overdrive",
+   LoadingTitle = "Erzwinge System-Synchronisation...",
 })
 
 local MainTab = Window:CreateTab("Welten", 4483362458)
@@ -18,56 +18,42 @@ MainTab:CreateDropdown({
 MainTab:CreateButton({
    Name = "Welt-Auswahl erzwingen",
    Callback = function()
-       local screen = game.Players.LocalPlayer.PlayerGui:FindFirstChild("QueueScreen")
-       if not screen then 
-           Rayfield:Notify({Title = "Fehler", Content = "Menü nicht offen!"})
-           return 
-       end
-
-       -- 1. Menü intern auf 'sichtbar' setzen
-       screen:SetAttribute("Hidden", false)
-
-       local success, err = pcall(function()
-           -- PFADE DEFINIEREN
-           local selection = screen.Main.SelectionScreen
-           local worlds = selection.Main.StageSelect.WorldSelect.Content.Stages
-           local chapterBtn = selection.Main:FindFirstChild("Chapter1", true) -- Sucht den Kapitel-Button
-
-           -- SCHRITT 1: WELT AUSWÄHLEN (Deine gewünschte Reihenfolge)
-           local targetBtn = worlds:FindFirstChild(selectedWorld)
-           if targetBtn then
-               for _, v in pairs(getconnections(targetBtn.MouseButton1Click)) do v:Fire() end
-               firesignal(targetBtn.Activated)
-               print("Schritt 1: Welt " .. selectedWorld .. " angewählt.")
-           end
-
-           task.wait(0.5) -- Kurze Pause für die Verarbeitung im Spiel
-
-           -- SCHRITT 2: KAPITEL AUSWÄHLEN
-           if chapterBtn then
-               for _, v in pairs(getconnections(chapterBtn.MouseButton1Click)) do v:Fire() end
-               firesignal(chapterBtn.Activated)
-               print("Schritt 2: Kapitel 1 angewählt.")
-           end
+       local player = game.Players.LocalPlayer
+       local screen = player.PlayerGui:FindFirstChild("QueueScreen")
+       
+       if screen then
+           -- SCHRITT 1: Attribute setzen (Aus deinem Log-Fund)
+           screen:SetAttribute("Hidden", false)
+           screen:SetAttribute("SelectedWorld", selectedWorld)
            
-           -- ZUSATZ: INTERNER FUNKTIONSAUFRUF (Falls Buttons allein nicht reichen)
-           for _, script in pairs(game:GetDescendants()) do
-               if script:IsA("LocalScript") and script.Name:find("Queue") then
-                   local sEnv = getsenv(script)
-                   if sEnv and sEnv.SelectWorld and sEnv.SelectChapter then
-                       sEnv.SelectWorld(selectedWorld)
+           -- SCHRITT 2: Interne Funktionen suchen und direkt ausführen
+           -- Wir scannen jetzt alle Scripte im PlayerGui, nicht nur im QueueScreen
+           for _, script in pairs(player.PlayerGui:GetDescendants()) do
+               if script:IsA("LocalScript") then
+                   local success, sEnv = pcall(getsenv, script)
+                   if success and sEnv then
+                       -- Wir rufen die Funktionen in der richtigen Reihenfolge auf
+                       if sEnv.SelectWorld then 
+                           pcall(function() sEnv.SelectWorld(selectedWorld) end)
+                       end
                        task.wait(0.1)
-                       sEnv.SelectChapter(1)
-                       print("Logik-Aufruf: World -> Chapter erfolgreich.")
+                       if sEnv.SelectChapter then 
+                           pcall(function() sEnv.SelectChapter(1) end)
+                       end
                    end
                end
            end
-       end)
 
-       if success then
-           Rayfield:Notify({Title = "Sequenz aktiv", Content = "World -> Chapter wurde gesendet!"})
-       else
-           warn("Fehler in der Sequenz: " .. tostring(err))
+           -- SCHRITT 3: Physische Button-Verbindungen feuern (Fallback)
+           local stages = screen.Main.SelectionScreen.Main.StageSelect.WorldSelect.Content.Stages
+           local targetBtn = stages:FindFirstChild(selectedWorld)
+           if targetBtn then
+               for _, connection in pairs(getconnections(targetBtn.MouseButton1Click)) do
+                   connection:Fire()
+               end
+           end
+
+           Rayfield:Notify({Title = "Sequenz beendet", Content = "Alle Signale für " .. selectedWorld .. " gesendet!"})
        end
    end,
 })
