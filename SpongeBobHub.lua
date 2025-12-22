@@ -1,7 +1,7 @@
 -- [[ KONFIGURATION ]] --
 -- Hier einfach den Namen ändern, den du willst:
-local TARGET_MAP = "JellyfishFields"  -- Optionen: "ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"
-local TARGET_DIFFICULTY = 1           -- 1=Normal, 2=Hard, 3=Nightmare, 4=DavyJones
+local TARGET_MAP = "KampKoral"  -- Optionen: "ChumBucket", "ConchStreet", "JellyfishFields", "KampKoral", "KrustyKrab", "RockBottom", "SandysTreedome"
+local TARGET_DIFFICULTY = 2           -- 1=Normal, 2=Hard, 3=Nightmare, 4=DavyJones
 local TARGET_CHAPTER = 1              -- 1 bis 10
 
 -- [[ SERVICES ]] --
