@@ -11,7 +11,6 @@ local selectedMap = "ConchStreet"
 local selectedChapter = 1
 local selectedDifficulty = 1
 
--- Maps aus deinen Screenshots
 local mapList = {
     "ChumBucket", 
     "ConchStreet", 
@@ -47,7 +46,6 @@ MainTab:CreateDropdown({
     Callback = function(Option) selectedChapter = tonumber(Option) end,
 })
 
--- Schwierigkeiten aus deinem Screenshot
 MainTab:CreateDropdown({
     Name = "Schwierigkeit",
     Options = {"Normal", "Hard", "Nightmare", "DavyJones"},
@@ -71,17 +69,14 @@ MainTab:CreateButton({
             return 
         end
 
-        -- LISTENER STARTEN
+        -- LISTENER STARTEN (Wartet auf Lobby-ID)
         local connection
         connection = createEvent.OnClientEvent:Connect(function(lobbyID)
             if type(lobbyID) == "number" then
                 connection:Disconnect() 
                 
-                -- Fix für den Concatenation-Fehler
-                Rayfield:Notify({Title="ID Abgefangen", Content="Lobby ID: " .. tostring(lobbyID)})
-                
-                -- Warten für Server-Sync (wie im erfolgreichen Test)
-                task.wait(2.0)
+                -- Warten für Server-Sync (exakt wie im erfolgreichen Test)
+                task.wait(2.2)
                 
                 -- MAP-DATEN SENDEN
                 local packet = {
@@ -95,15 +90,19 @@ MainTab:CreateButton({
                     }
                 }
                 
+                -- Das Signal feuern
                 signalEvent:FireServer(table.unpack(packet))
                 
-                -- Start-Befehl nach Map-Erstellung
+                -- Kurze Pause und dann StartGame
                 task.wait(1.5)
                 signalEvent:FireServer(lobbyID, "StartGame")
+                
+                Rayfield:Notify({Title="Erfolg", Content="Map gewählt & Start gefeuert!"})
             end
         end)
 
         -- Teleport auslösen
+        Rayfield:Notify({Title="Status", Content="Suche Lobby..."})
         task.spawn(function() FastTravel:_attemptTeleportToEmptyQueue() end)
     end,
 })
