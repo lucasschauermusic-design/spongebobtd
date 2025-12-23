@@ -1,5 +1,5 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Ultimate Bot", LoadingTitle = "Systeme bereit..."})
+local Window = Rayfield:CreateWindow({Name = "SpongeBob TD: Ultimate Bot", LoadingTitle = "Lade Macros..."})
 
 -- [[ SERVICES & REMOTES ]] --
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,18 +15,34 @@ local macroData = {}
 local isRecording = false
 local isPlaying = false
 local nextStepIndex = 1
-local currentMacroName = "StandardMacro"
+local currentMacroName = ""
+local savedMacros = {}
 
--- [[ HELFER: SPEICHER-LOGIK ]] --
+-- [[ HELFER: DATEI-SYSTEM ]] --
+
+-- Scannt den Ordner nach SBTD_ Dateien
+local function getSavedMacros()
+    local files = listfiles("") -- Listet alle Dateien im Workspace
+    local found = {}
+    for _, file in pairs(files) do
+        if file:sub(1, 5) == "SBTD_" and file:sub(-5) == ".json" then
+            -- Entferne "SBTD_" am Anfang und ".json" am Ende für die Anzeige
+            local name = file:sub(6, -6)
+            table.insert(found, name)
+        end
+    end
+    return found
+end
+
 local function autoSave(name)
-    if #macroData == 0 then return end
+    if #macroData == 0 or name == "" then return end
     local path = "SBTD_" .. name .. ".json"
     local export = {}
     for _, step in pairs(macroData) do
         table.insert(export, {pos = {step.cframe:GetComponents()}, slot = step.slot})
     end
     writefile(path, HttpService:JSONEncode(export))
-    Rayfield:Notify({Title="Auto-Save", Content="Macro '" .. name .. "' wurde gespeichert!"})
+    Rayfield:Notify({Title="Auto-Save", Content="Macro '" .. name .. "' gespeichert!"})
 end
 
 local function loadMacro(name)
@@ -37,50 +53,69 @@ local function loadMacro(name)
         for _, step in pairs(data) do
             table.insert(macroData, {cframe = CFrame.new(unpack(step.pos)), slot = step.slot})
         end
-        Rayfield:Notify({Title="Laden", Content=name .. " geladen (" .. #macroData .. " Units)"})
-    else
-        Rayfield:Notify({Title="Fehler", Content="Keine Datei für '" .. name .. "' gefunden."})
+        Rayfield:Notify({Title="Laden", Content=name .. " bereit (" .. #macroData .. " Units)"})
     end
 end
 
 -- [[ TABS ]] --
 local MainTab = Window:CreateTab("Main", 4483362458)
-local GameTab = Window:CreateTab("Gameplay", 4483362458)
 local MacroTab = Window:CreateTab("Macro", 4483362458)
 
--- [[ MACRO TAB: NEUE LOGIK ]] --
-MacroTab:CreateSection("Konfiguration")
+-- [[ MACRO TAB ]] --
+
+MacroTab:CreateSection("Neue Aufnahme")
 
 MacroTab:CreateInput({
-    Name = "Macro Name",
-    PlaceholderText = "z.B. ConchStreet_Hard",
+    Name = "Name für neues Macro",
+    PlaceholderText = "z.B. Map1_Hard",
     RemoveTextAfterFocusLost = false,
     Callback = function(Text)
         currentMacroName = Text
     end,
 })
 
-MacroTab:CreateSection("Steuerung")
-
-MacroTab:CreateToggle({
-    Name = "🔴 Aufnahme (Speichert automatisch beim Beenden)",
+local recordToggle = MacroTab:CreateToggle({
+    Name = "🔴 Aufnahme (Speichert automatisch)",
     CurrentValue = false,
     Callback = function(Value)
         isRecording = Value
         if Value then
             macroData = {}
-            Rayfield:Notify({Title="Aufnahme", Content="Starte Aufnahme für: " .. currentMacroName})
+            Rayfield:Notify({Title="Aufnahme", Content="Platziere jetzt Einheiten..."})
         else
-            -- AUTOMATISCHER SPEICHERVORGANG
-            autoSave(currentMacroName)
+            if currentMacroName ~= "" then
+                autoSave(currentMacroName)
+                -- Liste nach dem Speichern aktualisieren
+                -- (Hier müsste man das Dropdown-Objekt updaten)
+            else
+                Rayfield:Notify({Title="Fehler", Content="Kein Name angegeben!"})
+            end
+        end
+    end,
+})
+
+MacroTab:CreateSection("Playback & Auswahl")
+
+-- Initialer Scan der Dateien
+savedMacros = getSavedMacros()
+
+local macroDropdown = MacroTab:CreateDropdown({
+    Name = "Gespeicherte Macros",
+    Options = savedMacros,
+    CurrentOption = "",
+    Callback = function(Option)
+        if Option ~= "" then
+            loadMacro(Option)
         end
     end,
 })
 
 MacroTab:CreateButton({
-    Name = "📂 Gespeichertes Macro laden",
+    Name = "🔄 Liste aktualisieren",
     Callback = function()
-        loadMacro(currentMacroName)
+        local newList = getSavedMacros()
+        macroDropdown:Refresh(newList)
+        Rayfield:Notify({Title="Refresh", Content="Dateien wurden neu gescannt."})
     end,
 })
 
@@ -90,15 +125,11 @@ MacroTab:CreateToggle({
     Callback = function(Value)
         isPlaying = Value
         nextStepIndex = 1
-        if Value then
-            Rayfield:Notify({Title="Playback", Content="Suche Gold-Signale..."})
-        end
     end,
 })
 
 -- [[ LOGIK: HOOKS & GOLD-TRIGGER ]] --
 
--- Units beim Platzieren abgreifen
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -109,14 +140,14 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     return oldNamecall(self, ...)
 end)
 
--- Playback triggered durch Gold-Event
 GoldRemote.OnClientEvent:Connect(function()
     if not isPlaying or #macroData == 0 or nextStepIndex > #macroData then return end
     
     local step = macroData[nextStepIndex]
     task.spawn(function()
-        -- Wir versuchen die Unit zu setzen
         local success = PlaceTowerRemote:InvokeServer(step.cframe, step.slot)
+        -- Da InvokeServer bei Knit oft den Status zurückgibt, 
+        -- gehen wir nur zum nächsten Schritt, wenn der Server "Ja" sagt.
         if success then
             nextStepIndex = nextStepIndex + 1
         end
