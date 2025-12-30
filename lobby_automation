@@ -1,0 +1,209 @@
+-- Daily Prize Auto-Claim mit UI Spy System
+-- Automatisches Claimen von Preisen 1-9 mit UI-Element-Tracking
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Konfiguration
+local CONFIG = {
+    SpyEnabled = true,
+    ClaimDelay = 0.5,
+    StartPrize = 1,
+    EndPrize = 9
+}
+
+-- Utility: Formatierte Zeit für Logs
+local function GetTimestamp()
+    return os.date("[%H:%M:%S]")
+end
+
+-- Utility: Formatierte Konsolenausgabe
+local function PrintSeparator()
+    print(string.rep("=", 60))
+end
+
+-- Utility: UI-Element Details ausgeben
+local function LogUIElement(element, context)
+    if not CONFIG.SpyEnabled then return end
+
+    PrintSeparator()
+    print(GetTimestamp() .. " [UI SPY] Neues GUI Element erkannt!")
+    print("Kontext:", context or "Unbekannt")
+    print("Name:", element.Name)
+    print("ClassName:", element.ClassName)
+    print("FullPath:", element:GetFullName())
+
+    -- Parent-Hierarchie anzeigen
+    local parent = element.Parent
+    local hierarchy = {}
+    while parent and parent ~= game do
+        table.insert(hierarchy, 1, parent.Name)
+        parent = parent.Parent
+    end
+    print("Hierarchie:", table.concat(hierarchy, " > "))
+
+    -- Relevante Properties ausgeben
+    if element:IsA("ScreenGui") then
+        print("DisplayOrder:", element.DisplayOrder)
+        print("Enabled:", element.Enabled)
+        print("IgnoreGuiInset:", element.IgnoreGuiInset)
+    end
+
+    if element:IsA("Frame") or element:IsA("ImageLabel") then
+        print("Visible:", element.Visible)
+        print("Size:", tostring(element.Size))
+        print("Position:", tostring(element.Position))
+    end
+
+    if element:IsA("TextLabel") or element:IsA("TextButton") then
+        print("Text:", element.Text)
+    end
+
+    -- Kinder zählen
+    local childCount = #element:GetChildren()
+    if childCount > 0 then
+        print("Anzahl Kinder:", childCount)
+        local childNames = {}
+        for _, child in ipairs(element:GetChildren()) do
+            table.insert(childNames, child.Name)
+        end
+        print("Kinder Namen:", table.concat(childNames, ", "))
+    end
+
+    PrintSeparator()
+end
+
+-- UI Spy aktivieren
+local function SetupUISpySystem()
+    print(GetTimestamp() .. " [UI SPY] System wird initialisiert...")
+    PrintSeparator()
+
+    -- Überwache neue ScreenGuis in PlayerGui
+    local guiConnection = PlayerGui.ChildAdded:Connect(function(child)
+        task.wait(0.1) -- Kurze Verzögerung damit GUI vollständig geladen ist
+        LogUIElement(child, "PlayerGui.ChildAdded")
+
+        -- Überwache auch Kinder des neuen GUIs
+        if child:IsA("ScreenGui") then
+            child.ChildAdded:Connect(function(descendant)
+                task.wait(0.05)
+                LogUIElement(descendant, "Innerhalb von " .. child.Name)
+            end)
+        end
+    end)
+
+    -- Überwache Änderungen an bestehenden GUIs
+    for _, existingGui in ipairs(PlayerGui:GetChildren()) do
+        if existingGui:IsA("ScreenGui") then
+            existingGui.ChildAdded:Connect(function(child)
+                task.wait(0.05)
+                LogUIElement(child, "Bestehendes GUI: " .. existingGui.Name)
+            end)
+        end
+    end
+
+    print(GetTimestamp() .. " [UI SPY] System aktiv - Überwacht alle neuen UI Elemente")
+    PrintSeparator()
+
+    return guiConnection
+end
+
+-- Prize Claimer mit Fehlerbehandlung
+local function ClaimPrizes()
+    print(GetTimestamp() .. " [PRIZE CLAIMER] Starte Auto-Claim System...")
+    PrintSeparator()
+
+    -- Service-Pfad abrufen
+    local success, prizeService = pcall(function()
+        return ReplicatedStorage.Packages._Index["acecateer_knit@1.7.1"].knit.Services.PlaytimePrizeService.RF.ClaimPrize
+    end)
+
+    if not success or not prizeService then
+        warn(GetTimestamp() .. " [ERROR] PlaytimePrizeService konnte nicht gefunden werden!")
+        warn("Überprüfe ob der Pfad korrekt ist.")
+        return
+    end
+
+    print(GetTimestamp() .. " [PRIZE CLAIMER] Service gefunden - Beginne Claim-Prozess...")
+
+    -- Durchlaufe alle Preise
+    for i = CONFIG.StartPrize, CONFIG.EndPrize do
+        print(GetTimestamp() .. string.format(" [PRIZE CLAIMER] Claime Preis #%d...", i))
+
+        local claimSuccess, claimResult = pcall(function()
+            return prizeService:InvokeServer(i)
+        end)
+
+        if claimSuccess then
+            print(GetTimestamp() .. string.format(" [SUCCESS] Preis #%d erfolgreich geclaimt!", i))
+            if claimResult then
+                print("   Antwort vom Server:", tostring(claimResult))
+            end
+        else
+            warn(GetTimestamp() .. string.format(" [ERROR] Fehler beim Claimen von Preis #%d", i))
+            warn("   Details:", tostring(claimResult))
+        end
+
+        -- Verzögerung zwischen Claims (außer beim letzten)
+        if i < CONFIG.EndPrize then
+            task.wait(CONFIG.ClaimDelay)
+        end
+    end
+
+    PrintSeparator()
+    print(GetTimestamp() .. " [PRIZE CLAIMER] Claim-Prozess abgeschlossen!")
+    print("Insgesamt versucht:", CONFIG.EndPrize - CONFIG.StartPrize + 1, "Preise")
+    PrintSeparator()
+end
+
+-- Hauptfunktion
+local function Main()
+    print("\n")
+    PrintSeparator()
+    print("  SPONGEBOB LOBBY AUTOMATION")
+    print("  Daily Prize Auto-Claim + UI Spy System")
+    PrintSeparator()
+    print("Konfiguration:")
+    print("  UI Spy:", CONFIG.SpyEnabled and "Aktiviert" or "Deaktiviert")
+    print("  Claim Delay:", CONFIG.ClaimDelay, "Sekunden")
+    print("  Preis-Bereich:", CONFIG.StartPrize, "-", CONFIG.EndPrize)
+    PrintSeparator()
+    print("\n")
+
+    -- UI Spy System starten
+    local spyConnection = nil
+    if CONFIG.SpyEnabled then
+        spyConnection = SetupUISpySystem()
+    end
+
+    -- Kurze Verzögerung vor dem Claimen
+    task.wait(1)
+
+    -- Prize Claim System starten
+    ClaimPrizes()
+
+    -- Finaler Status
+    print("\n")
+    PrintSeparator()
+    print(GetTimestamp() .. " [STATUS] Script läuft weiter im Hintergrund")
+    print("UI Spy überwacht weiterhin alle neuen GUI Elemente")
+    print("\n")
+    print("HINWEIS FÜR POPUP-BLOCKING:")
+    print("1. Prüfe die Console-Ausgabe für neue UI Elemente")
+    print("2. Notiere den 'FullPath' des Popup-GUIs")
+    print("3. Nutze diese Info um das Popup zu blockieren:")
+    print("   Beispiel: PlayerGui.PopupName.Enabled = false")
+    PrintSeparator()
+
+    -- Connection zurückgeben für manuelles Disconnect falls gewünscht
+    return spyConnection
+end
+
+-- Script ausführen
+local spyConnection = Main()
+
+-- Optional: Spy manuell deaktivieren mit:
+-- if spyConnection then spyConnection:Disconnect() end
+-- CONFIG.SpyEnabled = false
