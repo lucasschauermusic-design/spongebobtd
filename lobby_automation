@@ -24,55 +24,90 @@ local function PrintSeparator()
     print(string.rep("=", 60))
 end
 
--- Utility: UI-Element Details ausgeben
+-- Utility: Text sicher kürzen
+local function SafeTruncate(text, maxLength)
+    maxLength = maxLength or 500
+    if type(text) ~= "string" then
+        text = tostring(text)
+    end
+    if #text > maxLength then
+        return text:sub(1, maxLength) .. "... [GEKÜRZT - Original: " .. #text .. " Zeichen]"
+    end
+    return text
+end
+
+-- Utility: UI-Element Details ausgeben (mit Fehlerbehandlung)
 local function LogUIElement(element, context)
     if not CONFIG.SpyEnabled then return end
 
-    PrintSeparator()
-    print(GetTimestamp() .. " [UI SPY] Neues GUI Element erkannt!")
-    print("Kontext:", context or "Unbekannt")
-    print("Name:", element.Name)
-    print("ClassName:", element.ClassName)
-    print("FullPath:", element:GetFullName())
-
-    -- Parent-Hierarchie anzeigen
-    local parent = element.Parent
-    local hierarchy = {}
-    while parent and parent ~= game do
-        table.insert(hierarchy, 1, parent.Name)
-        parent = parent.Parent
-    end
-    print("Hierarchie:", table.concat(hierarchy, " > "))
-
-    -- Relevante Properties ausgeben
-    if element:IsA("ScreenGui") then
-        print("DisplayOrder:", element.DisplayOrder)
-        print("Enabled:", element.Enabled)
-        print("IgnoreGuiInset:", element.IgnoreGuiInset)
+    -- Nur ScreenGuis und direkte wichtige Kinder loggen
+    if not element:IsA("ScreenGui") and not element:IsA("Frame") then
+        return -- Ignoriere unwichtige Elemente
     end
 
-    if element:IsA("Frame") or element:IsA("ImageLabel") then
-        print("Visible:", element.Visible)
-        print("Size:", tostring(element.Size))
-        print("Position:", tostring(element.Position))
-    end
+    local success, err = pcall(function()
+        PrintSeparator()
+        print(GetTimestamp() .. " [UI SPY] Neues GUI Element erkannt!")
+        print("Kontext:", SafeTruncate(context or "Unbekannt", 200))
+        print("Name:", SafeTruncate(element.Name, 200))
+        print("ClassName:", element.ClassName)
 
-    if element:IsA("TextLabel") or element:IsA("TextButton") then
-        print("Text:", element.Text)
-    end
-
-    -- Kinder zählen
-    local childCount = #element:GetChildren()
-    if childCount > 0 then
-        print("Anzahl Kinder:", childCount)
-        local childNames = {}
-        for _, child in ipairs(element:GetChildren()) do
-            table.insert(childNames, child.Name)
+        -- FullPath mit Error Handling
+        local fullPath = pcall(function() return element:GetFullName() end)
+        if fullPath then
+            print("FullPath:", SafeTruncate(element:GetFullName(), 500))
         end
-        print("Kinder Namen:", table.concat(childNames, ", "))
-    end
 
-    PrintSeparator()
+        -- Parent-Hierarchie anzeigen
+        local parent = element.Parent
+        local hierarchy = {}
+        local depth = 0
+        while parent and parent ~= game and depth < 10 do
+            table.insert(hierarchy, 1, parent.Name)
+            parent = parent.Parent
+            depth = depth + 1
+        end
+        print("Hierarchie:", SafeTruncate(table.concat(hierarchy, " > "), 500))
+
+        -- Relevante Properties ausgeben
+        if element:IsA("ScreenGui") then
+            print("DisplayOrder:", element.DisplayOrder)
+            print("Enabled:", element.Enabled)
+        end
+
+        if element:IsA("Frame") then
+            print("Visible:", element.Visible)
+        end
+
+        -- Text mit Längen-Limit (WICHTIG für den Fehler)
+        if element:IsA("TextLabel") or element:IsA("TextButton") then
+            local textSuccess, textValue = pcall(function() return element.Text end)
+            if textSuccess and textValue then
+                print("Text:", SafeTruncate(textValue, 500))
+            end
+        end
+
+        -- Kinder zählen (maximal 20 Namen anzeigen)
+        local childCount = #element:GetChildren()
+        if childCount > 0 then
+            print("Anzahl Kinder:", childCount)
+            if childCount <= 20 then
+                local childNames = {}
+                for _, child in ipairs(element:GetChildren()) do
+                    table.insert(childNames, child.Name)
+                end
+                print("Kinder Namen:", SafeTruncate(table.concat(childNames, ", "), 1000))
+            else
+                print("Kinder Namen: [Zu viele Kinder - Limit 20]")
+            end
+        end
+
+        PrintSeparator()
+    end)
+
+    if not success then
+        warn(GetTimestamp() .. " [UI SPY ERROR] Fehler beim Loggen:", err)
+    end
 end
 
 -- UI Spy aktivieren
